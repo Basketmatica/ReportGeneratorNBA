@@ -226,3 +226,5 @@ def generar_pdf_jugador(nombre_jugador: str, output_path: str):
         html = html.split('```html', 1)[-1].lstrip(")`\n")
         
     HTML(string=html_content).write_pdf(output_path)
+
+    return True
