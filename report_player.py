@@ -2,6 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 import time
 import re
@@ -33,9 +34,13 @@ def buscar_jugador(nombre_jugador):
 
 def obtener_html_con_selenium(url):
     '''Obtiene el HTML completo de una página utilizando Selenium'''
-    options = webdriver.ChromeOptions()
-    options.add_argument("--headless")
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+    options = Options()
+    options.headless = True
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.binary_location = "/usr/bin/google-chrome"  # MUY IMPORTANTE
+    
+    driver = webdriver.Chrome(options=options)
     driver.get(url)
     time.sleep(3)
     html = driver.page_source
