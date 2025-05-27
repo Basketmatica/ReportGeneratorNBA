@@ -34,13 +34,15 @@ def buscar_jugador(nombre_jugador):
 
 def obtener_html_con_selenium(url):
     '''Obtiene el HTML completo de una página utilizando Selenium'''
-    options = Options()
-    options.headless = True
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.binary_location = "/usr/bin/google-chrome"  # MUY IMPORTANTE
+   chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.binary_location = "/usr/bin/google-chrome"  # muy importante
     
-    driver = webdriver.Chrome(options=options)
+    # Aquí le decimos exactamente dónde está el chromedriver
+    service = Service("/usr/local/bin/chromedriver")
+    driver = webdriver.Chrome(service=service, options=chrome_options)
     driver.get(url)
     time.sleep(3)
     html = driver.page_source
