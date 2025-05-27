@@ -34,7 +34,7 @@ def buscar_jugador(nombre_jugador):
 
 def obtener_html_con_selenium(url):
     '''Obtiene el HTML completo de una página utilizando Selenium'''
-   chrome_options = Options()
+    chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
