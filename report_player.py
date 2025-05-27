@@ -7,7 +7,7 @@ import time
 import re
 import json
 from weasyprint import HTML
-from google import genai
+import google.generativeai as genai
 import os
 
 API_KEY = os.getenv("API_KEY")
