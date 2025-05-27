@@ -7,8 +7,6 @@ app = FastAPI()
 
 @app.get("/generate-pdf/")
 def generate_pdf(player_name: str = Query(...)):
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp:
-        generar_pdf_jugador(player_name, temp.name)
-        temp_path = temp.name
-
-    return FileResponse(temp_path, media_type="application/pdf", filename=f"{player_name} Report.pdf")
+    temp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+    generar_pdf_jugador(player_name, temp.name)  # llama a tu función con el nombre
+    return FileResponse(temp.name, media_type="application/pdf", filename=f"{player_name} Report.pdf")
