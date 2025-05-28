@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: report-app
+    runtime: python
+    buildCommand: ./build.sh && pip install -r requirements.txt
+    startCommand: python main.py
