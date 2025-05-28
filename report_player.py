@@ -223,7 +223,7 @@ def generar_pdf_jugador(nombre_jugador: str, output_path: str):
     prompt = generar_prompt_para_llm(player_data)
     genai.configure(api_key=API_KEY)
 
-    model = genai.GenerativeModel("gemini-pro")
+    model = genai.GenerativeModel("gemini-2.0-flash")
 
     response = model.generate_content(prompt)
 
