@@ -34,7 +34,14 @@ def buscar_jugador(nombre_jugador):
 
 def obtener_html_con_selenium(url):
     '''Obtiene el HTML completo de una página utilizando Selenium'''
-    driver = webdriver.Chrome()
+    options = Options()
+    options.add_argument("--headless")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--disable-dev-tools")
+    options.add_argument("--window-size=1920x1080")
+    driver = webdriver.Chrome(options=options)
     driver.get(url)
     time.sleep(3)
     html = driver.page_source
