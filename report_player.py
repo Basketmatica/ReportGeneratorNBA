@@ -221,11 +221,11 @@ def generar_pdf_jugador(nombre_jugador: str, output_path: str):
     }
 
     prompt = generar_prompt_para_llm(player_data)
-    client = genai.Client(api_key=API_KEY)
+    genai.configure(api_key=API_KEY)
 
-    response = client.models.generate_content(
-        model="gemini-2.0-flash", contents=prompt
-    )
+    model = genai.GenerativeModel("gemini-pro")
+
+    response = model.generate_content(prompt)
 
     html_content = re.sub(r"^```html\s*|```$", "", response.text.strip(), flags=re.IGNORECASE)
     if html_content.startswith("(```html)") or html_content.startswith("```html"):
