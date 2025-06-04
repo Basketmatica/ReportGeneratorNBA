@@ -42,6 +42,7 @@ def obtener_html_con_selenium(url):
     options.add_argument("--disable-dev-tools")
     options.add_argument("--window-size=1920x1080")
     driver = webdriver.Chrome(options=options)
+    driver.set_page_load_timeout(300)
     driver.get(url)
     time.sleep(3)
     html = driver.page_source
