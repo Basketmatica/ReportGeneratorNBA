@@ -168,39 +168,59 @@ Genera un informe técnico en formato HTML imprimible, estructurado semánticame
 
 Requisitos de contenido (no omitas ningún apartado):
 
-1. Imagen del Jugador
+1. Imagen del Jugador  
 Muestra la imagen en la parte superior izquierda con una etiqueta <img> y un atributo alt descriptivo.
 
-2. Datos Personales
+2. Datos Personales  
 Usa una tabla <table> simple para mostrar: nombre, altura, peso, posición, mano dominante, edad, nacionalidad, salario y equipo. Asegúrate de que sea legible y bien alineada, sin estar al mismo nivel de altura que la imagen. Además, antes de la tabla, incluye un header <h2> con el título "Reporte Jugador: " seguido del nombre del jugador.
 
-3. Resumen del Desempeño General
+3. Resumen del Desempeño General  
 Redacta un análisis breve (máx. 150 palabras), evaluando su rendimiento actual, impacto y posible aportación al equipo.
 
-4. Fortalezas
-Enumera 1 a 3 fortalezas clave en una lista con viñetas (<ul>), usando frases concisas (máx. 20 palabras cada una).
+4. Análisis FODA  
+Incluye un análisis estructurado con las siguientes sub-secciones:
 
-5. Debilidades
-Enumera 1 a 3 debilidades detectadas con tono constructivo y objetivo, también en formato de lista.
+  <section>
+    <h3>Fortalezas</h3>
+    <ul>
+      <li>Enumera de 1 a 3 fortalezas clave, con frases concisas de máximo 20 palabras cada una, fundamentadas en datos del JSON.</li>
+    </ul>
+  </section>
 
-6. Evaluación del Potencial de Crecimiento
+  <section>
+    <h3>Oportunidades</h3>
+    <ul>
+      <li>Identifica de 1 a 3 oportunidades externas que puedan potenciar su rendimiento o carrera (ej. rol en el equipo, entrenador, estilo de juego del equipo, calendario).</li>
+    </ul>
+  </section>
+
+  <section>
+    <h3>Debilidades</h3>
+    <ul>
+      <li>Enumera de 1 a 3 debilidades o áreas de mejora, expresadas con tono constructivo y máximo 20 palabras cada una.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h3>Amenazas</h3>
+    <ul>
+      <li>Enumera de 1 a 3 amenazas externas que podrían limitar su impacto (competencia en el equipo, historial de lesiones, edad, contrato, etc.).</li>
+    </ul>
+  </section>
+
+5. Evaluación del Potencial de Crecimiento  
 Redacta un párrafo (máx. 100 palabras) sobre las áreas en las que el jugador aún puede mejorar y su posible evolución futura. Ten en cuenta su edad y estadísticas actuales: si ya está en una etapa madura de su carrera, enfócate en su capacidad para mantener el rendimiento o adaptarse a nuevos roles, en lugar de proyectar un crecimiento significativo.
 
-7. Jugadores Similares
+6. Jugadores Similares  
 Menciona de 1 a 3 jugadores comparables. Justifica brevemente la similitud en estilo, físico, rol o estadísticas.
 
 Indicaciones de redacción:
 
-- Usa solo etiquetas HTML estándar (<section>, <h2>, <p>, <table>, <ul>, etc.).
-
+- Usa solo etiquetas HTML estándar (<section>, <h2>, <h3>, <p>, <table>, <ul>, <li>, etc.).
 - Aplica estilos básicos inline si es necesario (tamaño de imagen, espaciado mínimo), pensados para que el HTML sea directamente convertible a PDF sin perder legibilidad.
-
 - No incluyas encabezado ni pie de página externos.
-
 - No añadas información fuera del JSON ni uses referencias externas.
-
 - Mantén un lenguaje técnico, preciso y objetivo, dirigido a un equipo técnico profesional.
-
 - Apoya cada sección con estadísticas del JSON: los datos deben fundamentar el análisis.
 
 """
