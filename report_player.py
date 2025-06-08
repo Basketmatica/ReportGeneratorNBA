@@ -42,14 +42,8 @@ def obtener_html_con_selenium(url):
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--disable-dev-tools")
-    options.add_argument("--window-size=1920,1080")
-
-    # Detectar Chrome y asignar solo si se encuentra
-    chrome_path = which("google-chrome") or "/usr/bin/google-chrome"
-    if chrome_path:
-        options.binary_location = chrome_path  # ✅ Solo si es string válido
-
-    driver = uc.Chrome(options=options)
+    options.add_argument("--window-size=1920x1080")
+    driver = webdriver.Chrome(options=options)
     driver.set_page_load_timeout(300)
     driver.get(url)
     time.sleep(3)
