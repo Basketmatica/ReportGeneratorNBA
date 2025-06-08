@@ -4,6 +4,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
+import undetected_chromedriver as uc
 import time
 import re
 import json
@@ -34,15 +35,13 @@ def buscar_jugador(nombre_jugador):
 
 def obtener_html_con_selenium(url):
     '''Obtiene el HTML completo de una página utilizando Selenium'''
-    options = Options()
-    options.add_argument("--headless")
+    options = uc.ChromeOptions()
+    options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--disable-dev-tools")
-    options.add_argument("--window-size=1920x1080")
-    driver = webdriver.Chrome(options=options)
-    driver.set_page_load_timeout(300)
+    options.add_argument("--window-size=1920,1080")
+
+    driver = uc.Chrome(options=options)
     driver.get(url)
     time.sleep(3)
     html = driver.page_source
