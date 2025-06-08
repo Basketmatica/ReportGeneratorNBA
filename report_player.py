@@ -190,21 +190,21 @@ Incluye un análisis estructurado con las siguientes sub-secciones:
   <section>
     <h3>Oportunidades</h3>
     <ul>
-      <li>Identifica de 1 a 3 oportunidades externas que puedan potenciar su rendimiento o carrera (ej. rol en el equipo, entrenador, estilo de juego del equipo, calendario).</li>
+      <li>Identifica de 1 a 3 oportunidades externas que puedan potenciar su rendimiento o carrera (ej. rol en el equipo, entrenador, estilo de juego del equipo, calendario), fundamentadas en datos del JSON.</li>
     </ul>
   </section>
 
   <section>
     <h3>Debilidades</h3>
     <ul>
-      <li>Enumera de 1 a 3 debilidades o áreas de mejora, expresadas con tono constructivo y máximo 20 palabras cada una.</li>
+      <li>Enumera de 1 a 3 debilidades o áreas de mejora, expresadas con tono constructivo y máximo 20 palabras cada una, fundamentadas en datos del JSON.</li>
     </ul>
   </section>
 
   <section>
     <h3>Amenazas</h3>
     <ul>
-      <li>Enumera de 1 a 3 amenazas externas que podrían limitar su impacto (competencia en el equipo, historial de lesiones, edad, contrato, etc.).</li>
+      <li>Enumera de 1 a 3 amenazas externas que podrían limitar su impacto (competencia en el equipo, historial de lesiones, edad, contrato, etc.), fundamentadas en datos del JSON.</li>
     </ul>
   </section>
 
