@@ -36,12 +36,20 @@ def buscar_jugador(nombre_jugador):
 def obtener_html_con_selenium(url):
     '''Obtiene el HTML completo de una página utilizando Selenium'''
     options = uc.ChromeOptions()
-    options.add_argument("--headless=new")
+    options.add_argument("--headless=new")  # Headless moderno
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--disable-dev-tools")
     options.add_argument("--window-size=1920,1080")
 
+    # Detectar Chrome y asignar solo si se encuentra
+    chrome_path = which("google-chrome") or "/usr/bin/google-chrome"
+    if chrome_path:
+        options.binary_location = chrome_path  # ✅ Solo si es string válido
+
     driver = uc.Chrome(options=options)
+    driver.set_page_load_timeout(300)
     driver.get(url)
     time.sleep(3)
     html = driver.page_source
