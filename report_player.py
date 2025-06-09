@@ -219,7 +219,6 @@ Indicaciones de redacción:
 - Usa solo etiquetas HTML estándar (<section>, <h2>, <h3>, <p>, <table>, <ul>, <li>, etc.).
 - Aplica estilos básicos inline si es necesario (tamaño de imagen, espaciado mínimo), pensados para que el HTML sea directamente convertible a PDF sin perder legibilidad.
 - No incluyas encabezado ni pie de página externos.
-- El texto que no sean títulos o subtítulos debe estar justificado.
 - No añadas información fuera del JSON ni uses referencias externas.
 - Mantén un lenguaje técnico, preciso y objetivo, dirigido a un equipo técnico profesional.
 - Apoya cada sección con estadísticas del JSON: los datos deben fundamentar el análisis.
