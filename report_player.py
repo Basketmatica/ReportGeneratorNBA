@@ -222,6 +222,11 @@ Indicaciones de redacción:
 - No añadas información fuera del JSON ni uses referencias externas.
 - Mantén un lenguaje técnico, preciso y objetivo, dirigido a un equipo técnico profesional.
 - Apoya cada sección con estadísticas del JSON: los datos deben fundamentar el análisis.
+- Añade el siguiente logo en la esquina inferior derecha del documento, con opacidad media, para identificar el informe como autoría de Basketmática:
+
+<img src="https://basketmatica.wordpress.com/wp-content/uploads/2024/07/logo_basketmatica.png"
+     alt="Logo Basketmática"
+     style="position: absolute; bottom: 20px; right: 20px; width: 80px; opacity: 0.6;" />
 
 """
 
