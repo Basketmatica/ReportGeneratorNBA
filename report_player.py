@@ -1,10 +1,5 @@
 import requests
 from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service as ChromeService
-from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
-from shutil import which
 import undetected_chromedriver as uc
 import time
 import re
@@ -17,12 +12,16 @@ API_KEY = os.getenv("API_KEY")
 # link de la página de basketball-reference
 BASE_URL = "https://www.basketball-reference.com"
 
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
+                   (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+}
+
 def buscar_jugador(nombre_jugador):
     '''Busca la URL del perfil del jugador en Basketball Reference'''
     inicial = nombre_jugador.strip().split()[-1][0].lower()
     url = f"{BASE_URL}/players/{inicial}/"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    response = requests.get(url, headers=headers)
+    response = requests.get(url, headers=HEADERS, timeout=10)
     soup = BeautifulSoup(response.text, "html.parser")
     filas = soup.select("table#players tbody tr")
     for fila in filas:
@@ -34,22 +33,17 @@ def buscar_jugador(nombre_jugador):
     return None
 
 
-def obtener_html_con_selenium(url):
-    '''Obtiene el HTML completo de una página utilizando Selenium'''
-    options = uc.ChromeOptions()
-    options.add_argument("--headless=new")  # Headless moderno
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--disable-dev-tools")
-    options.add_argument("--window-size=1920x1080")
-    driver = webdriver.Chrome(options=options)
-    driver.set_page_load_timeout(300)
-    driver.get(url)
-    time.sleep(3)
-    html = driver.page_source
-    driver.quit()
-    return html
+def obtener_html_con_requests(url):
+    '''Obtiene el HTML completo de la página con retries'''
+    retries = 3
+    for i in range(retries):
+        try:
+            response = requests.get(url, headers=HEADERS, timeout=15)
+            if response.status_code == 200:
+                return response.text
+        except requests.exceptions.RequestException:
+            time.sleep(2)
+    return None
 
 
 def scrapear_datos_personales(html):
@@ -238,7 +232,7 @@ def generar_pdf_jugador(nombre_jugador: str, output_path: str):
     if not url_jugador:
         print(f"No se encontró el jugador: {nombre_jugador}")
         return
-    html = obtener_html_con_selenium(url_jugador)
+    html = obtener_html_con_requests(url_jugador)
     datos_personales = scrapear_datos_personales(html)
     estadisticas = scrapear_estadisticas_individuales(html)
     jugadores_similares = scrapear_jugadores_similares(html)
