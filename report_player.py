@@ -1,6 +1,11 @@
 import requests
 from bs4 import BeautifulSoup
-from playwright.sync_api import sync_playwright
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+from shutil import which
+import undetected_chromedriver as uc
 import time
 import re
 import json
@@ -28,14 +33,23 @@ def buscar_jugador(nombre_jugador):
                 return BASE_URL + enlace['href']
     return None
 
-def obtener_html_con_playwright(url):
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-        page.goto(url)
-        html = page.content()
-        browser.close()
-        return html
+
+def obtener_html_con_selenium(url):
+    '''Obtiene el HTML completo de una página utilizando Selenium'''
+    options = uc.ChromeOptions()
+    options.add_argument("--headless=new")  # Headless moderno
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--disable-dev-tools")
+    options.add_argument("--window-size=1920x1080")
+    driver = webdriver.Chrome(options=options)
+    driver.set_page_load_timeout(300)
+    driver.get(url)
+    time.sleep(3)
+    html = driver.page_source
+    driver.quit()
+    return html
 
 
 def scrapear_datos_personales(html):
@@ -224,7 +238,7 @@ def generar_pdf_jugador(nombre_jugador: str, output_path: str):
     if not url_jugador:
         print(f"No se encontró el jugador: {nombre_jugador}")
         return
-    html = obtener_html_con_playwright(url_jugador)
+    html = obtener_html_con_selenium(url_jugador)
     datos_personales = scrapear_datos_personales(html)
     estadisticas = scrapear_estadisticas_individuales(html)
     jugadores_similares = scrapear_jugadores_similares(html)
