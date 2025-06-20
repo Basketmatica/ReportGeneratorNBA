@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 
-# Actualizar paquetes del sistema
-apt update && apt install -y wget curl unzip gnupg ca-certificates
+# Install Chrome
+wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+apt install -y ./google-chrome-stable_current_amd64.deb
 
-# Instalar Python y pip si no están disponibles
-apt install -y python3 python3-pip
-
-# Instalar Playwright para Python
-pip install --upgrade pip
-pip install playwright
-
-# Descargar los navegadores y sus dependencias del sistema
-playwright install --with-deps
+# Install ChromeDriver
+CHROME_VERSION=$(google-chrome --version | cut -d ' ' -f 3 | cut -d '.' -f 1)
+DRIVER_VERSION=$(curl -sS "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_VERSION}")
+wget -N "https://chromedriver.storage.googleapis.com/${DRIVER_VERSION}/chromedriver_linux64.zip"
+unzip chromedriver_linux64.zip
+mv chromedriver /usr/local/bin/chromedriver
+chmod +x /usr/local/bin/chromedriver
 
