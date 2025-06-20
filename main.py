@@ -4,6 +4,13 @@ import tempfile
 from report_player import generar_pdf_jugador  # importa tu función
 
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://basketmatica.github.io"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/generate-pdf/")
 def generate_pdf(player_name: str = Query(...)):
