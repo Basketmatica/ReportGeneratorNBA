@@ -6,4 +6,4 @@ webdriver-manager
 requests
 weasyprint
 google-generativeai
-undetected-chromedriver==3.5.5
+playwright
