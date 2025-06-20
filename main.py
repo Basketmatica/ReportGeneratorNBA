@@ -2,6 +2,7 @@ from fastapi import FastAPI, Query
 from fastapi.responses import FileResponse
 import tempfile
 from report_player import generar_pdf_jugador  # importa tu función
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 app.add_middleware(
