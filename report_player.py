@@ -224,7 +224,7 @@ def generar_pdf_jugador(nombre_jugador: str, output_path: str):
     if not url_jugador:
         print(f"No se encontró el jugador: {nombre_jugador}")
         return
-    html = obtener_html_con_selenium(url_jugador)
+    html = obtener_html_con_playwright(url_jugador)
     datos_personales = scrapear_datos_personales(html)
     estadisticas = scrapear_estadisticas_individuales(html)
     jugadores_similares = scrapear_jugadores_similares(html)
