@@ -1,8 +1,6 @@
 import requests
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
-from shutil import which
-import undetected_chromedriver as uc
 import time
 import re
 import json
