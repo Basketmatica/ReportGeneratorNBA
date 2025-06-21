@@ -1,6 +1,7 @@
 fastapi
 uvicorn
 beautifulsoup4
+unicodedata
 selenium
 webdriver-manager
 requests
