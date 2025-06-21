@@ -15,6 +15,11 @@ app.add_middleware(
 
 @app.get("/generate-pdf/")
 def generate_pdf(player_name: str = Query(...)):
-    temp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-    generar_pdf_jugador(player_name, temp.name)  # llama a tu función con el nombre
-    return FileResponse(temp.name, media_type="application/pdf", filename=f"{player_name} Report.pdf")
+    try:
+        temp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+        generar_pdf_jugador(player_name, temp.name)  # esta función lanzará un ValueError si no encuentra al jugador
+        return FileResponse(temp.name, media_type="application/pdf", filename=f"{player_name} Report.pdf")
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error interno al generar el informe.")
