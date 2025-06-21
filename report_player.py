@@ -31,6 +31,7 @@ def buscar_jugador(nombre_jugador):
 
     url = f"{BASE_URL}/players/{apellido_inicial}/"
     response = requests.get(url, headers=HEADERS, timeout=10)
+    response.encoding = 'utf-8'
     soup = BeautifulSoup(response.text, "html.parser")
     filas = soup.select("table#players tbody tr")
 
