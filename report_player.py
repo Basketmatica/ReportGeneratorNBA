@@ -24,13 +24,15 @@ def buscar_jugador(nombre_jugador):
     response = requests.get(url, headers=HEADERS, timeout=10)
     soup = BeautifulSoup(response.text, "html.parser")
     filas = soup.select("table#players tbody tr")
+
     for fila in filas:
         enlace = fila.select_one("th a")
         if enlace:
             nombre = enlace.text.strip().lower()
             if nombre_jugador.lower() in nombre:
                 return BASE_URL + enlace['href']
-    return None
+    
+    raise ValueError("Jugador no encontrado. Verifica el nombre e inténtalo de nuevo.")
 
 
 def obtener_html_con_requests(url):
