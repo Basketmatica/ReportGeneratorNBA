@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, HTTPException
 from fastapi.responses import FileResponse
 import tempfile
 from report_player import generar_pdf_jugador  # importa tu función
