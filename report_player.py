@@ -46,7 +46,8 @@ def obtener_html_con_requests(url):
     retries = 3
     for i in range(retries):
         try:
-            response = requests.get(url, headers=HEADERS, timeout=15)
+            with httpx.Client(headers=HEADERS, timeout=10) as client:
+                response = client.get(url, headers=HEADERS, timeout=15)
             if response.status_code == 200:
                 return response.text
         except requests.exceptions.RequestException:
