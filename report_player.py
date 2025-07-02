@@ -18,18 +18,11 @@ HEADERS = {
                    (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
 
-def normalizar(texto):
-    """Quita acentos y caracteres especiales, y convierte a minúsculas."""
-    texto = unicodedata.normalize("NFD", texto)
-    texto = ''.join(c for c in texto if unicodedata.category(c) != 'Mn')
-    return texto.lower()
-
 def buscar_jugador(nombre_jugador):
     """Busca la URL del perfil del jugador en Basketball Reference."""
-    nombre_normalizado = normalizar(nombre_jugador.strip())
-    apellido_inicial = normalizar(nombre_jugador.strip().split()[-1])[0]
+    inicial = nombre_jugador.strip().split()[-1][0].lower()
 
-    url = f"{BASE_URL}/players/{apellido_inicial}/"
+    url = f"{BASE_URL}/players/{inicial}/"
     response = requests.get(url, headers=HEADERS, timeout=10)
     response.encoding = 'utf-8'
     soup = BeautifulSoup(response.text, "html.parser")
@@ -38,9 +31,9 @@ def buscar_jugador(nombre_jugador):
     for fila in filas:
         enlace = fila.select_one("th a")
         if enlace:
-            nombre_html = enlace.text.strip()
-            if normalizar(nombre_html) == nombre_normalizado:
-                return BASE_URL + enlace["href"]
+            nombre = enlace.text.strip().lower()
+            if nombre_jugador.lower() in nombre:
+                return BASE_URL + enlace['href']
 
     raise ValueError("Jugador no encontrado. Verifica el nombre e inténtalo de nuevo.")
 
