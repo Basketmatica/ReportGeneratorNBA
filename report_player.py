@@ -1,7 +1,7 @@
 import requests
 import unicodedata
 from bs4 import BeautifulSoup
-import undetected_chromedriver as uc
+import httpx
 import time
 import re
 import json
@@ -15,7 +15,9 @@ BASE_URL = "https://www.basketball-reference.com"
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
-                   (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                   (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.google.com"
 }
 
 def buscar_jugador(nombre_jugador):
@@ -23,7 +25,8 @@ def buscar_jugador(nombre_jugador):
     inicial = nombre_jugador.strip().split()[-1][0].lower()
 
     url = f"{BASE_URL}/players/{inicial}/"
-    response = requests.get(url, headers=HEADERS, timeout=10)
+    with httpx.Client(headers=HEADERS, timeout=10) as client:
+        response = client.get(url)
     response.encoding = 'utf-8'
     soup = BeautifulSoup(response.text, "html.parser")
     filas = soup.select("table#players tbody tr")
