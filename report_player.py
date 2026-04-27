@@ -54,17 +54,36 @@ ESTRUCTURA OBLIGATORIA (no omitas ningún apartado, aunque los datos sean limita
    - Cabecera de tabla: fondo #1d428a, texto blanco.
 
 3. ESTADÍSTICAS DESTACADAS
-   - Tabla con la última temporada disponible: PTS, REB, AST, STL, BLK, FG%,
-     3P%, FT%, MIN, Partidos. Indica el etiquetado de temporada en la cabecera.
-   - Si hay 'carrera_reciente', añade una segunda tabla titulada
-     "Promedios recientes (últimas temporadas)" con los mismos campos.
+   - Tabla 'Promedios por partido' con la última temporada disponible: PTS,
+     REB (OR/DR si están), AST, STL, BLK, TO, MIN, FG%, 3P%, FT%, Partidos.
+     Indica el etiquetado de temporada en la cabecera de la tabla.
+   - Si la última temporada incluye 'per36', añade una segunda tabla
+     'Per-36 minutos (última temporada)' con: PTS, REB, AST, STL, BLK, TO.
+     Es útil para contextualizar producción independientemente del minutaje.
    - Si hay 'temporadas_anteriores' con 2+ temporadas, añade una tabla
-     comparativa por filas (una fila por temporada).
-   - Si el JSON contiene la nota '_nota', muéstrala como pie de tabla en cursiva
-     y tamaño pequeño tras las tablas.
+     'Trayectoria reciente' comparativa (una fila por temporada) con
+     PTS/REB/AST/FG%/3P% al menos.
+   - Si hay 'carrera_promedio', añade una tabla 'Promedios de carrera'
+     con los mismos campos que la última temporada. Si hay 'per36' dentro,
+     incluye una columna o tabla complementaria con el per-36 de carrera.
+   - Si hay 'carrera_totales', añade una pequeña tabla 'Totales de carrera'
+     con: Partidos (ya viene de carrera_promedio), PTS totales, REB totales,
+     AST totales, STL totales, BLK totales, FG anotados-intentados,
+     3P anotados-intentados, FT anotados-intentados.
+   - Si hay 'avanzadas_ultima' o 'avanzadas_carrera', añade una tabla
+     'Estadísticas avanzadas' con dos columnas (Última temporada / Carrera)
+     mostrando: Dobles-dobles, Triples-dobles, AST/TO ratio, STL/TO ratio,
+     Eficiencia anotadora, Eficiencia de tiro, Faltas técnicas, Faltas
+     flagrantes. Omite filas sin datos.
+   - Si el JSON contiene la nota '_nota', muéstrala como pie de tabla en
+     cursiva y tamaño pequeño tras todas las tablas estadísticas.
 
 4. RESUMEN DEL DESEMPEÑO
-   - Párrafo de 100-150 palabras, analítico y técnico, fundamentado en los datos.
+   - Párrafo de 100-150 palabras, analítico y técnico, fundamentado en los
+     datos. Compara última temporada vs promedios de carrera (mejora,
+     mantenimiento, declive). Si hay per-36, úsalo para juzgar la producción
+     ajustada por minutaje. Si hay AST/TO o eficiencias, comenta lo que
+     dicen sobre control de balón y selección de tiro.
    - No inventes cifras que no estén en el JSON.
 
 5. ANÁLISIS FODA en cuadrícula 2×2
@@ -83,11 +102,16 @@ ESTRUCTURA OBLIGATORIA (no omitas ningún apartado, aunque los datos sean limita
        <h3 style="color:#dc3545;">🛡️ Amenazas</h3><ul>...</ul>
      </section>
    </div>
-   - De 2 a 3 puntos por sección (máx. 25 palabras por punto). Basa todo en los datos del JSON.
+   - De 2 a 3 puntos por sección (máx. 25 palabras por punto). Basa todo en
+     los datos del JSON. Aprovecha métricas avanzadas (DD2/TD3/AST-TO/
+     eficiencias) cuando estén disponibles, no te limites a las clásicas.
 
 6. POTENCIAL DE CRECIMIENTO
-   - Párrafo de 80-100 palabras. Si el jugador es veterano, enfócate en
-     sostenibilidad y adaptación de rol.
+   - Párrafo de 80-100 palabras. Si el jugador es veterano (carrera larga
+     según 'carrera_totales'/'Temporadas_NBA'), enfócate en sostenibilidad,
+     adaptación de rol y mantenimiento de eficiencia. Si la última temporada
+     muestra caída en minutos o producción respecto a 'carrera_promedio',
+     menciónalo.
 
 7. JUGADORES SIMILARES
    - Lista de 2-3 jugadores comparables con breve justificación
