@@ -1,15 +1,3 @@
-"""
-report_player.py
-================
-
-Orquestación del informe NBA:
-``nombre → datos del jugador → prompt Gemini → HTML → PDF``.
-
-Este módulo es agnóstico al transporte de datos. Toda la lógica de obtención
-(que es donde estaba el bug del IP-blocking de stats.nba.com) vive en
-``nba_data.py``.
-"""
-
 from __future__ import annotations
 
 import json
