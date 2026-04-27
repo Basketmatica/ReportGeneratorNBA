@@ -21,7 +21,7 @@ API_KEY = os.getenv("API_KEY", "").strip()
 # `gemini-2.0-flash` se desconecta el 1 de junio de 2026. Por defecto usamos
 # `gemini-2.5-flash`, que está en el free tier y es estrictamente superior.
 # El usuario puede sobreescribir con la env var GEMINI_MODEL si quiere.
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-pro").strip()
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
 
 
 # ─── Prompt ───────────────────────────────────────────────────────────────────
@@ -202,8 +202,8 @@ def generar_pdf_jugador(nombre_jugador: str, output_path: str) -> bool:
         model=GEMINI_MODEL,
         contents=generar_prompt_para_llm(player_data),
         config=genai_types.GenerateContentConfig(
-            temperature=0.35,
-            max_output_tokens=8192,
+            temperature=0.25,
+            max_output_tokens=32768,
         ),
     )
 
