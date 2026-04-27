@@ -21,7 +21,7 @@ API_KEY = os.getenv("API_KEY", "").strip()
 # `gemini-2.0-flash` se desconecta el 1 de junio de 2026. Por defecto usamos
 # `gemini-2.5-flash`, que está en el free tier y es estrictamente superior.
 # El usuario puede sobreescribir con la env var GEMINI_MODEL si quiere.
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-pro").strip()
 
 
 # ─── Prompt ───────────────────────────────────────────────────────────────────
