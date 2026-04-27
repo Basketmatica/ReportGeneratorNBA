@@ -1,267 +1,430 @@
-import requests
-import unicodedata
-from bs4 import BeautifulSoup
-import httpx
-import time
 import re
 import json
-from weasyprint import HTML
-import google.generativeai as genai
+import time
 import os
+import logging
+from datetime import datetime
+
+from google import genai
+from google.genai import types as genai_types
+from weasyprint import HTML
+
+from nba_api.stats.static import players as players_static
+from nba_api.stats.endpoints import (
+    commonplayerinfo,
+    playercareerstats,
+)
+
+# ─── Configuración ────────────────────────────────────────────────────────────
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s │ %(message)s")
+logger = logging.getLogger(__name__)
 
 API_KEY = os.getenv("API_KEY")
-# link de la página de basketball-reference
-BASE_URL = "https://www.basketball-reference.com"
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
-                   (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+# Headers oficiales requeridos por la API de stats.nba.com
+NBA_HEADERS = {
+    "Host": "stats.nba.com",
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json, text/plain, */*",
     "Accept-Language": "en-US,en;q=0.9",
-    "Referer": "https://www.google.com"
+    "Accept-Encoding": "gzip, deflate, br",
+    "x-nba-stats-origin": "stats",
+    "x-nba-stats-token": "true",
+    "Referer": "https://www.nba.com/",
+    "Connection": "keep-alive",
 }
 
-def buscar_jugador(nombre_jugador):
-    """Busca la URL del perfil del jugador en Basketball Reference."""
-    inicial = nombre_jugador.strip().split()[-1][0].lower()
-
-    url = f"{BASE_URL}/players/{inicial}/"
-    with httpx.Client(headers=HEADERS, timeout=10) as client:
-        response = client.get(url)
-    response.encoding = 'utf-8'
-    soup = BeautifulSoup(response.text, "html.parser")
-    filas = soup.select("table#players tbody tr")
-
-    for fila in filas:
-        enlace = fila.select_one("th a")
-        if enlace:
-            nombre = enlace.text.strip().lower()
-            if nombre_jugador.lower() in nombre:
-                return BASE_URL + enlace['href']
-
-    raise ValueError("Jugador no encontrado. Verifica el nombre e inténtalo de nuevo.")
+# URL de headshots oficiales de la NBA
+NBA_HEADSHOT_URL = "https://cdn.nba.com/headshots/nba/latest/1040x760/{player_id}.png"
 
 
-def obtener_html_con_requests(url):
-    '''Obtiene el HTML completo de la página con retries'''
-    retries = 3
-    for i in range(retries):
+# ─── Búsqueda de jugador ──────────────────────────────────────────────────────
+
+def buscar_jugador(nombre_jugador: str) -> dict:
+    """
+    Busca un jugador en la base de datos estática de la NBA (sin llamada de red).
+    Devuelve {'id': ..., 'full_name': ..., 'is_active': ...}.
+    Lanza ValueError si no se encuentra.
+    """
+    nombre_jugador = nombre_jugador.strip()
+    if not nombre_jugador:
+        raise ValueError("El nombre del jugador no puede estar vacío.")
+
+    # 1. Búsqueda por nombre completo (regex que nba_api usa internamente)
+    resultados = players_static.find_players_by_full_name(nombre_jugador)
+
+    # 2. Fallback: búsqueda por apellido y filtrado manual
+    if not resultados:
+        apellido = nombre_jugador.split()[-1]
+        candidatos = players_static.find_players_by_last_name(apellido)
+        nombre_lower = nombre_jugador.lower()
+        resultados = [
+            p for p in candidatos
+            if nombre_lower in p["full_name"].lower()
+            or p["full_name"].lower() in nombre_lower
+        ]
+
+    if not resultados:
+        raise ValueError(
+            f"Jugador '{nombre_jugador}' no encontrado. "
+            "Verifica la ortografía (usa el nombre en inglés, ej. 'LeBron James')."
+        )
+
+    # Preferir jugadores activos si hay varios resultados
+    activos = [p for p in resultados if p.get("is_active")]
+    return activos[0] if activos else resultados[0]
+
+
+# ─── Llamadas a la API de la NBA ──────────────────────────────────────────────
+
+def _llamar_endpoint(endpoint_cls, player_id: int, **kwargs):
+    """Llama a un endpoint de nba_api con reintentos y backoff exponencial."""
+    retries = 4
+    delay = 1.5
+    for intento in range(retries):
         try:
-            with httpx.Client(headers=HEADERS, timeout=10) as client:
-                response = client.get(url, headers=HEADERS, timeout=15)
-            if response.status_code == 200:
-                return response.text
-        except requests.exceptions.RequestException:
-            time.sleep(2)
-    return None
+            time.sleep(delay)
+            endpoint = endpoint_cls(
+                player_id=player_id,
+                headers=NBA_HEADERS,
+                timeout=30,
+                **kwargs,
+            )
+            return endpoint.get_data_frames()
+        except Exception as exc:
+            if intento < retries - 1:
+                logger.warning(
+                    f"[{endpoint_cls.__name__}] intento {intento + 1}/{retries} "
+                    f"fallido: {exc}. Reintentando en {delay:.0f}s…"
+                )
+                delay *= 2
+            else:
+                raise RuntimeError(
+                    f"No se pudo obtener datos de {endpoint_cls.__name__} "
+                    f"tras {retries} intentos."
+                ) from exc
 
 
-def scrapear_datos_personales(html):
-    '''Extrae la información personal del jugador desde el HTML'''
-    soup = BeautifulSoup(html, "html.parser")
-    meta_div = soup.find('div', id='meta')
-    personal_info = {}
-    if meta_div:
-        img_tag = meta_div.find('img')
-        if img_tag and 'src' in img_tag.attrs:
-            personal_info['Foto'] = img_tag['src']
-        name_tag = meta_div.find('h1')
-        if name_tag:
-            span_name = name_tag.find('span')
-            if span_name:
-                personal_info['Nombre'] = span_name.get_text(strip=True)
-        paragraphs = meta_div.find_all('p')
-        for p in paragraphs:
-            strong_tag = p.find('strong')
-            if strong_tag:
-                key = strong_tag.get_text(strip=True).rstrip(':')
-                full_text = p.get_text(" ", strip=True)
-                key_text = strong_tag.get_text(strip=True)
-                value = full_text.replace(key_text, '', 1).strip()
-                if value.startswith(':'):
-                    value = value[1:].strip()
+# ─── Extracción de datos personales ──────────────────────────────────────────
 
-                # Separar Position y Shoots si están juntos
-                if key == "Position" and "Shoots:" in value:
-                    parts = value.split("Shoots:")
-                    position = parts[0].replace('▪', '').strip(", \n ")
-                    shoots = parts[1].strip()
-                    personal_info["Position"] = position
-                    personal_info["Shoots"] = shoots
-                    if personal_info["Shoots"] == "Left":
-                        personal_info["Shoots"] = "Izquierda"
-                    else:
-                        personal_info["Shoots"] = "Derecha"
-                else:
-                    personal_info[key] = value
-        for p in paragraphs:
-            p_text = p.get_text(" ", strip=True)
-            if 'cm' in p_text and 'kg' in p_text:
-                start = p_text.find('(')
-                end = p_text.find(')')
-                if start != -1 and end != -1:
-                    physical = p_text[start+1:end].strip()
-                    personal_info['Físico'] = physical
-                else:
-                    personal_info['Físico'] = p_text
-    salary_span = soup.find('span', string=lambda x: x and "$" in x)
-    if salary_span:
-        salary = salary_span.text
-        personal_info['Salario'] = salary
-    allowed_keys = {'Foto', 'Nombre', 'Position', 'Shoots', 'Team', 'Born', 'College', 'Draft', 'Físico', 'Salario'}
-    personal_info = {k: v for k, v in personal_info.items() if k in allowed_keys and v}
-    return personal_info
+def obtener_info_personal(player_id: int) -> dict:
+    """Extrae datos biográficos y de equipo del jugador."""
+    dfs = _llamar_endpoint(commonplayerinfo.CommonPlayerInfo, player_id)
+    row = dfs[0].iloc[0]
 
+    # Edad calculada a partir de la fecha de nacimiento
+    edad = ""
+    try:
+        nacimiento = datetime.strptime(str(row["BIRTHDATE"])[:10], "%Y-%m-%d")
+        hoy = datetime.today()
+        edad = str(
+            hoy.year - nacimiento.year
+            - ((hoy.month, hoy.day) < (nacimiento.month, nacimiento.day))
+        )
+    except Exception:
+        pass
 
-def scrapear_estadisticas_individuales(html):
-    '''Extrae las estadísticas individuales del jugador desde el HTML'''
-    soup = BeautifulSoup(html, "html.parser")
-    stats_dict = {}
-    # Estadísticas por 36 minutos
-    data_row = soup.find('tr', id=re.compile(r'^per_minute_stats\.\d+ Yrs$'))
-    if data_row:
-        cells = data_row.find_all('td')
-        #labels = ['pts_per_minute_36', 'trb_per_minute_36', 'ast_per_minute_36',
-         #         'stl_per_minute_36', 'blk_per_minute_36', 'tov_per_minute_36',
-          #        'pf_per_minute_36']
-        for td in cells:
-            stat_name = td.get('data-stat')
-            #if stat_name in labels:
-            stats_dict[stat_name] = td.get_text(strip=True)
-    # Estadísticas avanzadas
-    data_row = soup.find('tr', id=re.compile(r'^advanced\.\d+ Yrs$'))
-    if data_row:
-        cells = data_row.find_all('td')
-        #labels = ['ts_pct', 'per', 'obpm', 'dbpm', 'bpm']
-        for td in cells:
-            stat_name = td.get('data-stat')
-            #if stat_name in labels:
-            stats_dict[stat_name] = td.get_text(strip=True)
-    # Rating ofensivo y defensivo
-    data_row = soup.find('tr', id=re.compile(r'^per_poss\.\d+ Yrs$'))
-    if data_row:
-        cells = data_row.find_all('td')
-        #labels = ['off_rtg', 'def_rtg']
-        for td in cells:
-            stat_name = td.get('data-stat')
-            #if stat_name in labels:
-            stats_dict[stat_name] = td.get_text(strip=True)
-    return stats_dict
+    # Conversión de altura: "6-9" → "6-9 (206 cm)"
+    altura_imperial = str(row.get("HEIGHT", ""))
+    altura_fmt = altura_imperial
+    try:
+        pies, pulgadas = map(int, altura_imperial.split("-"))
+        cm = round(pies * 30.48 + pulgadas * 2.54)
+        altura_fmt = f"{altura_imperial} ft ({cm} cm)"
+    except Exception:
+        pass
 
-def scrapear_jugadores_similares(html):
-    '''Extrae los jugadores similares desde el HTML'''
-    soup = BeautifulSoup(html, "html.parser")
-    table_similarities = soup.find('table', id='sims-thru')
-    similar_players = []
-    if table_similarities:
-        rows = table_similarities.find_all('tr')[3:]  # Omitimos el encabezado
-        for row in rows:
-            cells = row.find_all('th')
-            if len(cells) > 0:
-                player_name = cells[0].get_text(strip=True)
-                similar_players.append(player_name)
-    return similar_players
+    # Conversión de peso: lbs → kg
+    peso_lbs = str(row.get("WEIGHT", ""))
+    peso_fmt = peso_lbs
+    try:
+        kg = round(int(peso_lbs) * 0.453592)
+        peso_fmt = f"{peso_lbs} lbs ({kg} kg)"
+    except Exception:
+        pass
 
+    # Información del draft
+    draft_year = str(row.get("DRAFT_YEAR", "")).strip()
+    if draft_year and draft_year not in ("0", "Undrafted", ""):
+        draft = (
+            f"{draft_year}, Ronda {row.get('DRAFT_ROUND', '?')}, "
+            f"Pick #{row.get('DRAFT_NUMBER', '?')}"
+        )
+    else:
+        draft = "No draftado"
 
-def generar_prompt_para_llm(player_data: dict) -> str:
-    prompt = f"""Eres un analista profesional de baloncesto especializado en estadística avanzada, scouting y redacción técnica. A partir del siguiente objeto JSON que contiene información detallada de un jugador:
-
-{json.dumps(player_data, ensure_ascii=False, indent=2)}
-
-Genera un informe técnico en formato HTML imprimible, estructurado semánticamente y optimizado para su posterior conversión directa a PDF. El contenido debe seguir un formato profesional, claro y autónomo, sin depender de hojas de estilo externas ni scripts.
-
-Requisitos de contenido (no omitas ningún apartado):
-
-1. Imagen del Jugador  
-Muestra la imagen en la parte superior izquierda con una etiqueta <img> y un atributo alt descriptivo.
-
-2. Datos Personales  
-Usa una tabla <table> simple para mostrar: nombre, altura, peso, posición, mano dominante, edad, nacionalidad, salario y equipo. Asegúrate de que sea legible y bien alineada, sin estar al mismo nivel de altura que la imagen. Además, antes de la tabla, incluye un header <h2> con el título "Reporte Jugador: " seguido del nombre del jugador.
-
-3. Resumen del Desempeño General  
-Redacta un análisis breve (máx. 150 palabras), evaluando su rendimiento actual, impacto y posible aportación al equipo.
-
-4. Análisis FODA  
-Incluye un análisis estructurado con las siguientes sub-secciones:
-
-  <section>
-    <h3>Fortalezas</h3>
-    <ul>
-      <li>Enumera de 1 a 3 fortalezas clave, con frases concisas de máximo 20 palabras cada una, fundamentadas en datos del JSON.</li>
-    </ul>
-  </section>
-
-  <section>
-    <h3>Oportunidades</h3>
-    <ul>
-      <li>Identifica de 1 a 3 oportunidades externas que puedan potenciar su rendimiento o carrera (ej. rol en el equipo, entrenador, estilo de juego del equipo, calendario), fundamentadas en datos del JSON.</li>
-    </ul>
-  </section>
-
-  <section>
-    <h3>Debilidades</h3>
-    <ul>
-      <li>Enumera de 1 a 3 debilidades o áreas de mejora, expresadas con tono constructivo y máximo 20 palabras cada una, fundamentadas en datos del JSON.</li>
-    </ul>
-  </section>
-
-  <section>
-    <h3>Amenazas</h3>
-    <ul>
-      <li>Enumera de 1 a 3 amenazas externas que podrían limitar su impacto (competencia en el equipo, historial de lesiones, edad, contrato, etc.), fundamentadas en datos del JSON.</li>
-    </ul>
-  </section>
-
-5. Evaluación del Potencial de Crecimiento  
-Redacta un párrafo (máx. 100 palabras) sobre las áreas en las que el jugador aún puede mejorar y su posible evolución futura. Ten en cuenta su edad y estadísticas actuales: si ya está en una etapa madura de su carrera, enfócate en su capacidad para mantener el rendimiento o adaptarse a nuevos roles, en lugar de proyectar un crecimiento significativo.
-
-6. Jugadores Similares  
-Menciona de 1 a 3 jugadores comparables. Justifica brevemente la similitud en estilo, físico, rol o estadísticas.
-
-Indicaciones de redacción:
-
-- Usa solo etiquetas HTML estándar (<section>, <h2>, <h3>, <p>, <table>, <ul>, <li>, etc.).
-- Aplica estilos básicos inline si es necesario (tamaño de imagen, espaciado mínimo), pensados para que el HTML sea directamente convertible a PDF sin perder legibilidad.
-- No incluyas encabezado ni pie de página externos.
-- No añadas información fuera del JSON ni uses referencias externas.
-- Mantén un lenguaje técnico, preciso y objetivo, dirigido a un equipo técnico profesional.
-- Apoya cada sección con estadísticas del JSON: los datos deben fundamentar el análisis.
-- Añade el siguiente logo en la esquina inferior derecha del documento, con opacidad media, para identificar el informe como autoría de Basketmática:
-
-<img src="https://basketmatica.wordpress.com/wp-content/uploads/2024/07/logo_basketmatica.png"
-     alt="Logo Basketmática"
-     style="position: absolute; bottom: 20px; right: 20px; width: 80px; opacity: 0.6;" />
-
-"""
-
-    return prompt
-
-
-def generar_pdf_jugador(nombre_jugador: str, output_path: str):
-    url_jugador = buscar_jugador(nombre_jugador)
-    if not url_jugador:
-        print(f"No se encontró el jugador: {nombre_jugador}")
-        return
-    html = obtener_html_con_requests(url_jugador)
-    datos_personales = scrapear_datos_personales(html)
-    estadisticas = scrapear_estadisticas_individuales(html)
-    jugadores_similares = scrapear_jugadores_similares(html)
-    player_data = {
-        "Datos personales": datos_personales,
-        "Estadísticas individuales": estadisticas,
-        "Jugadores similares": jugadores_similares
+    return {
+        "Foto": NBA_HEADSHOT_URL.format(player_id=player_id),
+        "Nombre": str(row.get("DISPLAY_FIRST_LAST", "")),
+        "Equipo": str(row.get("TEAM_NAME", "Sin equipo")),
+        "Ciudad": str(row.get("TEAM_CITY", "")),
+        "Posición": str(row.get("POSITION", "")),
+        "Altura": altura_fmt,
+        "Peso": peso_fmt,
+        "Edad": edad,
+        "País": str(row.get("COUNTRY", "")),
+        "Universidad": str(row.get("SCHOOL", "–")),
+        "Draft": draft,
+        "Temporadas_NBA": str(row.get("SEASON_EXP", "")),
     }
 
-    prompt = generar_prompt_para_llm(player_data)
-    genai.configure(api_key=API_KEY)
 
-    model = genai.GenerativeModel("gemini-2.0-flash")
+# ─── Extracción de estadísticas ───────────────────────────────────────────────
 
-    response = model.generate_content(prompt)
+def _fmtv(row, col: str) -> str:
+    """Formatea un valor numérico de DataFrame de manera segura."""
+    try:
+        val = row[col]
+        if val is None or str(val) in ("nan", ""):
+            return "–"
+        return str(round(float(val), 1))
+    except Exception:
+        return "–"
 
-    html_content = re.sub(r"^```html\s*|```$", "", response.text.strip(), flags=re.IGNORECASE)
-    if html_content.startswith("(```html)") or html_content.startswith("```html"):
-        html = html.split('```html', 1)[-1].lstrip(")`\n")
-        
+
+def _fmtpct(row, col: str) -> str:
+    """Formatea un porcentaje (0-1 → XX.X%)."""
+    try:
+        val = float(row[col])
+        return f"{round(val * 100, 1)}%"
+    except Exception:
+        return "–"
+
+
+def obtener_estadisticas(player_id: int) -> dict:
+    """
+    Obtiene estadísticas de carrera (por partido, por 36 min) y
+    la última temporada del jugador.
+    """
+    stats = {}
+
+    # ── Estadísticas por partido (carrera completa) ──
+    try:
+        dfs = _llamar_endpoint(
+            playercareerstats.PlayerCareerStats,
+            player_id,
+            per_mode_simple="PerGame",
+        )
+        carrera = dfs[1]  # [1] = totales de carrera
+        if not carrera.empty:
+            r = carrera.iloc[0]
+            stats["carrera_por_partido"] = {
+                "Partidos": _fmtv(r, "GP"),
+                "Minutos": _fmtv(r, "MIN"),
+                "Puntos": _fmtv(r, "PTS"),
+                "Rebotes": _fmtv(r, "REB"),
+                "Rebotes_ofensivos": _fmtv(r, "OREB"),
+                "Rebotes_defensivos": _fmtv(r, "DREB"),
+                "Asistencias": _fmtv(r, "AST"),
+                "Robos": _fmtv(r, "STL"),
+                "Tapones": _fmtv(r, "BLK"),
+                "Pérdidas": _fmtv(r, "TOV"),
+                "Faltas": _fmtv(r, "PF"),
+                "FG%": _fmtpct(r, "FG_PCT"),
+                "3P%": _fmtpct(r, "FG3_PCT"),
+                "FT%": _fmtpct(r, "FT_PCT"),
+            }
+        # Última temporada
+        temporadas = dfs[0]
+        if not temporadas.empty:
+            ult = temporadas.iloc[-1]
+            stats["ultima_temporada"] = {
+                "Temporada": str(ult.get("SEASON_ID", "")),
+                "Equipo": str(ult.get("TEAM_ABBREVIATION", "")),
+                "Partidos": _fmtv(ult, "GP"),
+                "Minutos": _fmtv(ult, "MIN"),
+                "Puntos": _fmtv(ult, "PTS"),
+                "Rebotes": _fmtv(ult, "REB"),
+                "Asistencias": _fmtv(ult, "AST"),
+                "Robos": _fmtv(ult, "STL"),
+                "Tapones": _fmtv(ult, "BLK"),
+                "FG%": _fmtpct(ult, "FG_PCT"),
+                "3P%": _fmtpct(ult, "FG3_PCT"),
+                "FT%": _fmtpct(ult, "FT_PCT"),
+            }
+    except Exception as exc:
+        logger.warning(f"Stats por partido no disponibles: {exc}")
+
+    # ── Estadísticas por 36 minutos (carrera) ──
+    try:
+        dfs36 = _llamar_endpoint(
+            playercareerstats.PlayerCareerStats,
+            player_id,
+            per_mode_simple="Per36",
+        )
+        carrera36 = dfs36[1]
+        if not carrera36.empty:
+            r = carrera36.iloc[0]
+            stats["carrera_por_36_min"] = {
+                "Puntos_36": _fmtv(r, "PTS"),
+                "Rebotes_36": _fmtv(r, "REB"),
+                "Asistencias_36": _fmtv(r, "AST"),
+                "Robos_36": _fmtv(r, "STL"),
+                "Tapones_36": _fmtv(r, "BLK"),
+                "Pérdidas_36": _fmtv(r, "TOV"),
+                "FG%": _fmtpct(r, "FG_PCT"),
+                "3P%": _fmtpct(r, "FG3_PCT"),
+                "FT%": _fmtpct(r, "FT_PCT"),
+            }
+    except Exception as exc:
+        logger.warning(f"Stats por 36 min no disponibles: {exc}")
+
+    return stats
+
+
+# ─── Prompt para Gemini ───────────────────────────────────────────────────────
+
+def generar_prompt_para_llm(player_data: dict) -> str:
+    nombre = player_data.get("Datos personales", {}).get("Nombre", "el jugador")
+    return f"""Eres un analista profesional de baloncesto especializado en estadística avanzada, scouting y redacción técnica.
+
+A partir del siguiente JSON con información detallada de un jugador de la NBA, genera un informe técnico en HTML listo para convertir a PDF.
+
+=== DATOS DEL JUGADOR ===
+{json.dumps(player_data, ensure_ascii=False, indent=2)}
+=========================
+
+ESTRUCTURA OBLIGATORIA (no omitas ningún apartado):
+
+1. CABECERA
+   - <img> con la URL de 'Foto' del JSON, flotando a la izquierda (max-width: 160px).
+   - A la derecha: nombre en <h1> con color #1d428a, posición y equipo en <p>.
+   - Línea divisoria <hr> tras la cabecera.
+
+2. DATOS PERSONALES
+   - <h2>Reporte Jugador: {nombre}</h2>
+   - Tabla de 2 columnas con: Edad, País, Altura, Peso, Posición, Equipo, Universidad, Draft, Temporadas NBA.
+   - Cabecera de tabla: fondo #1d428a, texto blanco.
+
+3. ESTADÍSTICAS DESTACADAS
+   - Tabla con estadísticas de carrera por partido: PTS, REB, AST, STL, BLK, FG%, 3P%, FT%, MIN.
+   - Si hay datos de última temporada, añade una segunda tabla con etiqueta de temporada.
+
+4. RESUMEN DEL DESEMPEÑO
+   - Párrafo de 100-150 palabras, analítico y técnico, fundamentado en los datos.
+
+5. ANÁLISIS FODA en cuadrícula 2×2
+   Usa este HTML exacto para el grid:
+   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+     <section style="border: 1px solid #1d428a; padding: 10px; border-radius: 4px;">
+       <h3 style="color:#1d428a;">💪 Fortalezas</h3><ul>...</ul>
+     </section>
+     <section style="border: 1px solid #28a745; padding: 10px; border-radius: 4px;">
+       <h3 style="color:#28a745;">🚀 Oportunidades</h3><ul>...</ul>
+     </section>
+     <section style="border: 1px solid #ffc107; padding: 10px; border-radius: 4px;">
+       <h3 style="color:#856404;">⚠️ Debilidades</h3><ul>...</ul>
+     </section>
+     <section style="border: 1px solid #dc3545; padding: 10px; border-radius: 4px;">
+       <h3 style="color:#dc3545;">🛡️ Amenazas</h3><ul>...</ul>
+     </section>
+   </div>
+   - De 2 a 3 puntos por sección (máx. 25 palabras por punto). Basa todo en los datos del JSON.
+
+6. POTENCIAL DE CRECIMIENTO
+   - Párrafo de 80-100 palabras. Si el jugador es veterano, enfócate en sostenibilidad y adaptación de rol.
+
+7. JUGADORES SIMILARES
+   - Lista de 2-3 jugadores comparables con breve justificación (físico, estadísticas, rol, estilo).
+
+REGLAS TÉCNICAS:
+- Solo CSS inline. Sin <style>, sin <link>, sin <script>.
+- Fuente: font-family: 'Helvetica Neue', Arial, sans-serif.
+- Colores: texto #1a1a1a, fondo blanco, acento #1d428a (azul NBA).
+- Contenedor principal: <div style="max-width: 800px; margin: 0 auto; padding: 32px; font-family: ...">
+- Tablas: border-collapse: collapse; width: 100%; celdas con padding: 6px 10px; border: 1px solid #dee2e6.
+- Cabeceras de tabla: background: #1d428a; color: white; font-weight: bold.
+
+LOGO BASKETMÁTICA (esquina inferior derecha):
+<img src="https://basketmatica.wordpress.com/wp-content/uploads/2024/07/logo_basketmatica.png"
+     alt="Logo Basketmática"
+     style="position: fixed; bottom: 20px; right: 20px; width: 80px; opacity: 0.6;" />
+
+RESPUESTA: devuelve ÚNICAMENTE el HTML, sin backticks, sin explicaciones.
+Empieza con <!DOCTYPE html> y cierra con </html>.
+Idioma del informe: ESPAÑOL.
+"""
+
+
+# ─── Limpieza HTML de Gemini ──────────────────────────────────────────────────
+
+def _limpiar_html_gemini(texto: str) -> str:
+    """Elimina envoltorios de markdown que Gemini a veces añade."""
+    texto = texto.strip()
+    # Quitar ```html ... ``` o ``` ... ```
+    texto = re.sub(r"^```(?:html)?\s*\n?", "", texto, flags=re.IGNORECASE)
+    texto = re.sub(r"\n?```\s*$", "", texto, flags=re.IGNORECASE)
+    return texto.strip()
+
+
+# ─── Pipeline principal ───────────────────────────────────────────────────────
+
+def generar_pdf_jugador(nombre_jugador: str, output_path: str) -> bool:
+    """
+    Pipeline completo:
+      buscar jugador → datos personales → estadísticas → prompt → Gemini → PDF
+
+    Parámetros:
+        nombre_jugador: nombre en inglés (ej. "LeBron James", "Stephen Curry").
+        output_path:    ruta donde se guardará el PDF resultante.
+
+    Retorna True si todo fue exitoso.
+    Lanza ValueError (jugador no encontrado) o RuntimeError (errores de API).
+    """
+    logger.info(f"=== Iniciando informe para: '{nombre_jugador}' ===")
+
+    # 1. Buscar jugador (sin llamada de red, base de datos local)
+    jugador = buscar_jugador(nombre_jugador)
+    player_id = jugador["id"]
+    logger.info(f"✓ Jugador encontrado: {jugador['full_name']} (ID: {player_id})")
+
+    # 2. Obtener datos personales
+    logger.info("Obteniendo información personal…")
+    datos_personales = obtener_info_personal(player_id)
+
+    # 3. Obtener estadísticas
+    logger.info("Obteniendo estadísticas de carrera…")
+    estadisticas = obtener_estadisticas(player_id)
+
+    player_data = {
+        "Datos personales": datos_personales,
+        "Estadísticas": estadisticas,
+    }
+
+    # 4. Generar HTML con Gemini
+    logger.info("Generando informe con Gemini…")
+    if not API_KEY:
+        raise EnvironmentError(
+            "Variable de entorno 'API_KEY' no configurada. "
+            "Añade tu clave de API de Google Gemini."
+        )
+
+    client = genai.Client(api_key=API_KEY)
+
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=generar_prompt_para_llm(player_data),
+        config=genai_types.GenerateContentConfig(
+            temperature=0.35,
+            max_output_tokens=8192,
+        ),
+    )
+
+    html_content = _limpiar_html_gemini(response.text)
+
+    if not html_content.lstrip().startswith("<"):
+        raise ValueError(
+            "La respuesta de Gemini no contiene HTML válido. "
+            f"Inicio: {html_content[:120]!r}"
+        )
+
+    # 5. Convertir a PDF
+    logger.info(f"Generando PDF → {output_path}")
     HTML(string=html_content).write_pdf(output_path)
-
+    logger.info("✓ PDF generado correctamente.")
     return True
