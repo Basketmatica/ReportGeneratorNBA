@@ -480,7 +480,16 @@ def _espn_stats_jugador(espn_id: str) -> Optional[dict]:
 
 # Mapa nombre-ESPN → clave normalizada interna.
 # ESPN usa nombres como "avgPoints", "avgRebounds"… que son consistentes en NBA.
-_ESPN_STAT_KEYS = {
+# ─────────────────────────────────────────────────────────────────────────────
+# Mapeos de nombres ESPN → claves normalizadas en español
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Categoría "averages" (per-game): nombres de stat → clave normalizada.
+_ESPN_STAT_KEYS: Dict[str, str] = {
+    "gamesPlayed": "Partidos",
+    "games": "Partidos",
+    "avgMinutes": "Minutos",
+    "minutes": "Minutos",
     "avgPoints": "Puntos",
     "points": "Puntos",
     "avgRebounds": "Rebotes",
@@ -499,101 +508,139 @@ _ESPN_STAT_KEYS = {
     "turnovers": "Pérdidas",
     "avgFouls": "Faltas",
     "fouls": "Faltas",
-    "avgMinutes": "Minutos",
-    "minutes": "Minutos",
     "fieldGoalPct": "FG%",
     "threePointFieldGoalPct": "3P%",
     "freeThrowPct": "FT%",
-    "gamesPlayed": "Partidos",
-    "games": "Partidos",
 }
 
+# Categoría "totals" (totales acumulados de carrera): incluye los compuestos
+# "X-Y" (anotados-intentados) que tienen su propio sentido y queremos preservar.
+_ESPN_TOTALS_KEYS: Dict[str, str] = {
+    "fieldGoalsMade-fieldGoalsAttempted": "FG_anotados_intentados",
+    "fieldGoalPct": "FG%",
+    "threePointFieldGoalsMade-threePointFieldGoalsAttempted": "3P_anotados_intentados",
+    "threePointFieldGoalPct": "3P%",
+    "freeThrowsMade-freeThrowsAttempted": "FT_anotados_intentados",
+    "freeThrowPct": "FT%",
+    "offensiveRebounds": "Rebotes_ofensivos",
+    "defensiveRebounds": "Rebotes_defensivos",
+    "totalRebounds": "Rebotes",
+    "assists": "Asistencias",
+    "blocks": "Tapones",
+    "steals": "Robos",
+    "fouls": "Faltas",
+    "turnovers": "Pérdidas",
+    "points": "Puntos",
+}
 
-def _stats_temporada_espn(stats_arr: List[dict]) -> Dict[str, str]:
-    """Convierte el array `stats` de ESPN (con name/displayValue) a dict normalizado."""
+# Categoría "miscellaneous" (estadísticas avanzadas).
+_ESPN_MISC_KEYS: Dict[str, str] = {
+    "doubleDouble": "Dobles_dobles",
+    "tripleDouble": "Triples_dobles",
+    "disqualifications": "Descalificaciones",
+    "ejections": "Expulsiones",
+    "technicalFouls": "Faltas_tecnicas",
+    "flagrantFouls": "Faltas_flagrantes",
+    "assistTurnoverRatio": "AST_TO_ratio",
+    "stealTurnoverRatio": "STL_TO_ratio",
+    "scoringEfficiency": "Eficiencia_anotadora",
+    "shootingEfficiency": "Eficiencia_tiro",
+}
+
+# Conjunto de claves que requieren sufijo "%".
+_PCT_KEYS: set = {"FG%", "3P%", "FT%"}
+
+# Campos que tiene sentido normalizar a per-36-min.
+_PER36_FIELDS = [
+    "Puntos", "Rebotes", "Rebotes_ofensivos", "Rebotes_defensivos",
+    "Asistencias", "Robos", "Tapones", "Pérdidas", "Faltas",
+]
+
+_EXPECTED_PG = [
+    "Partidos", "Minutos", "Puntos", "Rebotes",
+    "Rebotes_ofensivos", "Rebotes_defensivos",
+    "Asistencias", "Robos", "Tapones",
+    "Pérdidas", "Faltas", "FG%", "3P%", "FT%",
+]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Parsers genéricos
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _parsear_fila_posicional(
+    names: List[str],
+    stats: List[Any],
+    key_map: Dict[str, str],
+    pct_keys: Optional[set] = None,
+) -> Dict[str, str]:
+    """
+    Genérico: hace ``zip(names, stats)`` y mapea via ``key_map`` a un dict
+    normalizado. ESPN devuelve las stats como array PLANO posicional, así que
+    el orden importa.
+
+    Si una clave normalizada está en ``pct_keys`` y el valor no termina en
+    ``%``, se le añade el sufijo.
+    """
+    pct_keys = pct_keys or set()
     out: Dict[str, str] = {}
-    for st in stats_arr or []:
-        if not isinstance(st, dict):
-            continue
-        name = str(st.get("name") or "")
-        target = _ESPN_STAT_KEYS.get(name)
+    for name, value in zip(names or [], stats or []):
+        target = key_map.get(name)
         if not target:
             continue
-        # Preferimos displayValue (ya formateado por ESPN); si no, value numérico.
-        dv = st.get("displayValue")
-        if dv is not None and str(dv).strip():
-            out[target] = str(dv)
-        else:
-            v = _safe_float(st.get("value"))
-            out[target] = "–" if v is None else f"{round(v, 1)}"
-
-    # Asegurar todas las claves esperadas (con guion si faltan).
-    expected = [
-        "Partidos", "Minutos", "Puntos", "Rebotes",
-        "Rebotes_ofensivos", "Rebotes_defensivos",
-        "Asistencias", "Robos", "Tapones",
-        "Pérdidas", "Faltas", "FG%", "3P%", "FT%",
-    ]
-    for k in expected:
-        out.setdefault(k, "–")
+        v = "" if value is None else str(value).strip()
+        if not v or v in {"-", "--"}:
+            out[target] = "–"
+            continue
+        if target in pct_keys and not v.endswith("%"):
+            v = f"{v}%"
+        out[target] = v
     return out
 
 
-def _temporadas_recientes_espn(espn_id: str, n_temporadas: int = 6) -> List[Dict[str, Any]]:
+def _categoria_por_nombre(raw: dict, nombre: str) -> Optional[dict]:
+    """Localiza una categoría dentro de la respuesta /stats por su `name`."""
+    if not isinstance(raw, dict):
+        return None
+    for c in raw.get("categories") or []:
+        if isinstance(c, dict) and str(c.get("name") or "").lower() == nombre.lower():
+            return c
+    return None
+
+
+def _per36(stats: Dict[str, str]) -> Dict[str, str]:
     """
-    Parsea la respuesta /stats de ESPN y devuelve las últimas N temporadas
-    de regular season en formato normalizado.
+    Calcula promedios per-36-minutos a partir de un dict de stats per-game.
+    Devuelve dict vacío si los minutos no son válidos.
 
-    El JSON de ESPN tiene esta forma (resumida):
-        {
-          "categories": [
-            {
-              "displayName": "Regular Season",
-              "type": "total"|"perGame",
-              "statistics": [
-                {"season": {"year": 2024, "displayName": "2024-25"},
-                 "stats": [{"name":"avgPoints","displayValue":"25.7",...}, ...]
-                 },
-                ...
-              ]
-            },
-            ...
-          ]
-        }
-    Es un esquema cambiante; parseamos defensivamente.
+    Per-36 es útil para comparar jugadores con minutajes diferentes —
+    es la convención estándar en análisis NBA.
     """
-    raw = _espn_stats_jugador(espn_id)
-    if not raw or not isinstance(raw, dict):
-        return []
-
-    # Localizar la categoría "Regular Season" tipo "perGame" si existe;
-    # en su defecto, la primera con statistics.
-    categorias = raw.get("categories") or []
-    if not isinstance(categorias, list):
-        return []
-
-    elegida: Optional[dict] = None
-    for c in categorias:
-        if not isinstance(c, dict):
+    minutos = _safe_float(str(stats.get("Minutos", "")).rstrip("%"))
+    if not minutos or minutos <= 0:
+        return {}
+    factor = 36.0 / minutos
+    out: Dict[str, str] = {}
+    for k in _PER36_FIELDS:
+        v = _safe_float(str(stats.get(k, "")).rstrip("%"))
+        if v is None:
             continue
-        nombre = str(c.get("displayName") or c.get("name") or "").lower()
-        tipo = str(c.get("type") or "").lower()
-        if "regular" in nombre and "game" in tipo:
-            elegida = c
-            break
-    if elegida is None:
-        for c in categorias:
-            if isinstance(c, dict) and "regular" in str(
-                c.get("displayName") or ""
-            ).lower():
-                elegida = c
-                break
-    if elegida is None and categorias:
-        elegida = categorias[0] if isinstance(categorias[0], dict) else None
-    if not elegida:
-        return []
+        out[k] = f"{round(v * factor, 1)}"
+    return out
 
-    rows = elegida.get("statistics") or []
+
+def _seasons_de_categoria(
+    cat: dict, key_map: Dict[str, str], pct_keys: set
+) -> List[Dict[str, Any]]:
+    """
+    Parsea ``cat["statistics"]`` a lista de seasons normalizadas, ordenadas
+    DESC por año (más reciente primero). Filtra entradas vacías.
+    """
+    names = cat.get("names") or []
+    if not names:
+        return []
+    rows = cat.get("statistics") or []
     seasons: List[Dict[str, Any]] = []
     for row in rows:
         if not isinstance(row, dict):
@@ -601,89 +648,130 @@ def _temporadas_recientes_espn(espn_id: str, n_temporadas: int = 6) -> List[Dict
         season_obj = row.get("season") or {}
         if isinstance(season_obj, dict):
             year = season_obj.get("year") or season_obj.get("displayYear")
-            display = season_obj.get(
-                "displayName"
-            ) or f"{year}-{(int(year) + 1) % 100:02d}" if year else "–"
+            display = season_obj.get("displayName") or (
+                f"{int(year) - 1}-{int(year) % 100:02d}" if year else "–"
+            )
         else:
             year = None
             display = str(season_obj) if season_obj else "–"
 
         stats_arr = row.get("stats") or []
-        fila = _stats_temporada_espn(stats_arr)
+        fila = _parsear_fila_posicional(names, stats_arr, key_map, pct_keys)
         fila["Temporada"] = display
-        fila["__year"] = int(year) if isinstance(year, (int, str)) and str(year).isdigit() else 0
+        try:
+            fila["__year"] = int(year) if year is not None else 0
+        except (TypeError, ValueError):
+            fila["__year"] = 0
         seasons.append(fila)
 
-    # Orden descendente por año, quitar entradas vacías.
-    seasons = [s for s in seasons if s.get("Partidos") not in (None, "–", "0")]
+    # Filtrar entradas sin datos relevantes (todo "–" / vacío / 0).
+    def has_data(s: Dict[str, Any]) -> bool:
+        for k, v in s.items():
+            if k in {"Temporada", "__year"}:
+                continue
+            if v not in (None, "", "–", "0"):
+                return True
+        return False
+
+    seasons = [s for s in seasons if has_data(s)]
     seasons.sort(key=lambda s: s.get("__year", 0), reverse=True)
-    return seasons[:n_temporadas]
+    return seasons
 
 
-def _media_carrera_espn(seasons: List[Dict[str, Any]]) -> Dict[str, str]:
-    """Promedio ponderado por partidos jugados sobre las temporadas dadas."""
-    if not seasons:
+# ─────────────────────────────────────────────────────────────────────────────
+# Extractor maestro: una sola llamada, todo procesado
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _extraer_stats_completas_espn(
+    espn_id: str, n_temporadas: int = 6
+) -> Dict[str, Any]:
+    """
+    Hace UNA sola llamada a ``/stats`` y devuelve un diccionario completo:
+
+    .. code-block:: python
+
+        {
+            "temporadas":       [...],   # últimas N per-game (más reciente 1ª)
+            "carrera_promedio": {...},   # per-game de TODA la carrera + per-36
+            "carrera_totales":  {...},   # contadores de carrera (PTS totales…)
+            "avanzadas_ultima": {...},   # misc de la temporada más reciente
+            "avanzadas_carrera":{...},   # misc acumulada de carrera
+        }
+
+    Cada bloque puede faltar de forma independiente — robusto a categorías
+    que ESPN omita o cambie. Los errores se loguean pero no se propagan.
+    """
+    raw = _espn_stats_jugador(espn_id)
+    if not raw or not isinstance(raw, dict):
         return {}
 
-    cols_pg = [
-        "Puntos", "Rebotes", "Rebotes_ofensivos", "Rebotes_defensivos",
-        "Asistencias", "Robos", "Tapones", "Pérdidas", "Faltas", "Minutos",
-    ]
-    cols_pct = ["FG%", "3P%", "FT%"]
+    out: Dict[str, Any] = {}
 
-    acumulado: Dict[str, float] = {}
-    contadores: Dict[str, float] = {}
-    total_g = 0.0
+    # ── Categoría "averages": per-game por temporada + media de carrera ──
+    try:
+        cat_avg = _categoria_por_nombre(raw, "averages")
+        if cat_avg:
+            names_avg = cat_avg.get("names") or []
+            seasons = _seasons_de_categoria(cat_avg, _ESPN_STAT_KEYS, _PCT_KEYS)
 
-    for s in seasons:
-        g = _safe_float(s.get("Partidos")) or 0
-        if g <= 0:
-            continue
-        total_g += g
-        for c in cols_pg + cols_pct:
-            v_str = s.get(c)
-            if v_str in (None, "–", ""):
-                continue
-            # FG% / 3P% / FT% pueden venir como "47.3" o "47.3%" o "0.473".
-            v = _safe_float(str(v_str).rstrip("%"))
-            if v is None:
-                continue
-            if c in cols_pct and v <= 1.0:
-                v *= 100  # normalizar a porcentaje
-            acumulado[c] = acumulado.get(c, 0.0) + v * g
-            contadores[c] = contadores.get(c, 0.0) + g
+            # Asegurar todas las claves esperadas en cada season.
+            for s in seasons:
+                for k in _EXPECTED_PG:
+                    s.setdefault(k, "–")
+                p36 = _per36(s)
+                if p36:
+                    s["per36"] = p36
 
-    if total_g == 0:
-        return {}
+            out["temporadas"] = seasons[:n_temporadas]
 
-    def fmt(c: str, dec: int = 1) -> str:
-        n = contadores.get(c, 0)
-        if c not in acumulado or n == 0:
-            return "–"
-        return f"{round(acumulado[c] / n, dec)}"
+            # Media de carrera real (no aproximada) que ESPN ya pre-calcula.
+            career_pg = _parsear_fila_posicional(
+                names_avg, cat_avg.get("totals") or [], _ESPN_STAT_KEYS, _PCT_KEYS
+            )
+            if career_pg:
+                for k in _EXPECTED_PG:
+                    career_pg.setdefault(k, "–")
+                p36 = _per36(career_pg)
+                if p36:
+                    career_pg["per36"] = p36
+                out["carrera_promedio"] = career_pg
+    except Exception as exc:
+        logger.warning("Error parseando 'averages' de ESPN: %s", exc)
 
-    def fmt_pct(c: str) -> str:
-        n = contadores.get(c, 0)
-        if c not in acumulado or n == 0:
-            return "–"
-        return f"{round(acumulado[c] / n, 1)}%"
+    # ── Categoría "totals": contadores acumulados de carrera ──
+    try:
+        cat_tot = _categoria_por_nombre(raw, "totals")
+        if cat_tot:
+            names_tot = cat_tot.get("names") or []
+            career_tot = _parsear_fila_posicional(
+                names_tot, cat_tot.get("totals") or [], _ESPN_TOTALS_KEYS, _PCT_KEYS
+            )
+            if career_tot:
+                out["carrera_totales"] = career_tot
+    except Exception as exc:
+        logger.warning("Error parseando 'totals' de ESPN: %s", exc)
 
-    return {
-        "Partidos": str(int(total_g)),
-        "Minutos": fmt("Minutos"),
-        "Puntos": fmt("Puntos"),
-        "Rebotes": fmt("Rebotes"),
-        "Rebotes_ofensivos": fmt("Rebotes_ofensivos"),
-        "Rebotes_defensivos": fmt("Rebotes_defensivos"),
-        "Asistencias": fmt("Asistencias"),
-        "Robos": fmt("Robos"),
-        "Tapones": fmt("Tapones"),
-        "Pérdidas": fmt("Pérdidas"),
-        "Faltas": fmt("Faltas"),
-        "FG%": fmt_pct("FG%"),
-        "3P%": fmt_pct("3P%"),
-        "FT%": fmt_pct("FT%"),
-    }
+    # ── Categoría "miscellaneous": estadísticas avanzadas ──
+    try:
+        cat_misc = _categoria_por_nombre(raw, "miscellaneous")
+        if cat_misc:
+            names_misc = cat_misc.get("names") or []
+            misc_seasons = _seasons_de_categoria(cat_misc, _ESPN_MISC_KEYS, set())
+            if misc_seasons:
+                # Sólo exponemos la más reciente — el resto sería ruido.
+                misc_ultima = dict(misc_seasons[0])
+                misc_ultima.pop("__year", None)
+                out["avanzadas_ultima"] = misc_ultima
+            misc_carrera = _parsear_fila_posicional(
+                names_misc, cat_misc.get("totals") or [], _ESPN_MISC_KEYS, set()
+            )
+            if misc_carrera:
+                out["avanzadas_carrera"] = misc_carrera
+    except Exception as exc:
+        logger.warning("Error parseando 'miscellaneous' de ESPN: %s", exc)
+
+    return out
 
 
 # ─── API pública ──────────────────────────────────────────────────────────────
@@ -699,11 +787,26 @@ def obtener_datos_jugador(nombre_jugador: str) -> Dict[str, Any]:
         Estructura normalizada con las claves:
 
         - ``"Datos personales"``: dict con bio (nombre, equipo, posición,
-          altura, peso, edad, draft, universidad, país, temporadas, foto).
-        - ``"Estadísticas"``: dict con sub-claves ``carrera_reciente`` (media
-          ponderada de las últimas ~6 temporadas), ``ultima_temporada`` y
-          ``temporadas_anteriores`` (lista de las anteriores). Puede ir vacío
-          si ESPN no responde — el informe se genera igualmente.
+          altura, peso, draft, universidad, país, temporadas en NBA, foto).
+        - ``"Estadísticas"``: dict con TODAS estas sub-claves (cada una puede
+          faltar de forma independiente si ESPN no la devuelve):
+
+            * ``ultima_temporada``: per-game de la temporada más reciente,
+              incluye ``per36`` con los promedios normalizados a 36 minutos.
+            * ``temporadas_anteriores``: lista de las N-1 temporadas previas
+              (más reciente → más antigua), también con ``per36`` cada una.
+            * ``carrera_promedio``: per-game de TODA la carrera (calculado
+              por ESPN, no aproximación) + ``per36``.
+            * ``carrera_totales``: contadores totales de carrera (PTS, REB,
+              AST totales, FG anotados-intentados, etc.).
+            * ``avanzadas_ultima``: estadísticas avanzadas de la última
+               temporada (DD2, TD3, AST/TO, eficiencias, técnicas…).
+            * ``avanzadas_carrera``: estadísticas avanzadas acumuladas de
+               carrera.
+            * ``_nota``: nota de pie sobre la fuente de datos.
+
+        Estadísticas puede ir vacío si ESPN no responde — el informe se
+        genera igualmente sólo con la bio.
 
     Raises
     ------
@@ -739,9 +842,9 @@ def obtener_datos_jugador(nombre_jugador: str) -> Dict[str, Any]:
         "Dorsal": str(bdl.get("jersey_number") or "–"),
     }
 
-    # 3) Estadísticas en ESPN (gratis, sin clave). Degradación graceful: si
-    #    ESPN falla, devolvemos bio + estadísticas vacías para que el informe
-    #    se genere igualmente.
+    # 3) Estadísticas completas vía ESPN (gratis, sin clave). Una sola llamada
+    #    HTTP da: per-game por temporada, medias de carrera reales, totales
+    #    de carrera y métricas avanzadas. Degradación graceful en cada bloque.
     estadisticas: Dict[str, Any] = {}
     espn_id: Optional[str] = None
     try:
@@ -753,11 +856,12 @@ def obtener_datos_jugador(nombre_jugador: str) -> Dict[str, Any]:
     if espn_id:
         logger.info("✓ ESPN athlete ID: %s", espn_id)
         try:
-            seasons = _temporadas_recientes_espn(espn_id)
+            stats = _extraer_stats_completas_espn(espn_id)
         except Exception as exc:
-            logger.warning("Parseo de stats ESPN falló: %s", exc)
-            seasons = []
+            logger.warning("Extracción de stats ESPN falló: %s", exc)
+            stats = {}
 
+        seasons = stats.get("temporadas") or []
         if seasons:
             logger.info("✓ Recolectadas %d temporadas desde ESPN.", len(seasons))
             ultima = dict(seasons[0])
@@ -771,15 +875,29 @@ def obtener_datos_jugador(nombre_jugador: str) -> Dict[str, Any]:
                 anteriores.append(fila)
             estadisticas["temporadas_anteriores"] = anteriores
 
-            estadisticas["carrera_reciente"] = _media_carrera_espn(seasons)
-            estadisticas["_nota"] = (
-                f"Promedios ponderados de las últimas {len(seasons)} temporadas "
-                "(fuente: ESPN)."
-            )
             bio["Temporadas_NBA"] = str(len(seasons))
         else:
-            logger.warning("ESPN devolvió 0 temporadas para %s.", full_name)
+            logger.warning("ESPN devolvió 0 temporadas per-game para %s.", full_name)
             bio["Temporadas_NBA"] = "–"
+
+        if stats.get("carrera_promedio"):
+            estadisticas["carrera_promedio"] = stats["carrera_promedio"]
+            logger.info("✓ Promedios de carrera obtenidos.")
+        if stats.get("carrera_totales"):
+            estadisticas["carrera_totales"] = stats["carrera_totales"]
+            logger.info("✓ Totales de carrera obtenidos.")
+        if stats.get("avanzadas_ultima"):
+            estadisticas["avanzadas_ultima"] = stats["avanzadas_ultima"]
+        if stats.get("avanzadas_carrera"):
+            estadisticas["avanzadas_carrera"] = stats["avanzadas_carrera"]
+            logger.info("✓ Estadísticas avanzadas (misc) obtenidas.")
+
+        if estadisticas:
+            estadisticas["_nota"] = (
+                "Fuente: ESPN. Per-36 calculado a partir de los promedios "
+                "per-game. Las estadísticas avanzadas incluyen dobles-dobles, "
+                "triples-dobles, ratios de juego y eficiencias."
+            )
     else:
         logger.warning(
             "No se pudo obtener ID ESPN para '%s'. "
