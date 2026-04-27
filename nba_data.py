@@ -187,18 +187,64 @@ def buscar_jugador_nba(nombre_jugador: str) -> Dict[str, Any]:
 def _bdl_buscar_jugador(nombre: str) -> Dict[str, Any]:
     """
     Busca un jugador en balldontlie por nombre y devuelve la mejor coincidencia.
+
+    Importante: el parámetro `search` de balldontlie busca un substring literal
+    en `first_name` O `last_name` por separado. Por eso `search="LeBron James"`
+    devuelve vacío (no aparece como substring en ninguno de los dos campos).
+    Estrategia robusta: intentamos varias búsquedas (apellido, nombre completo,
+    nombre de pila) y combinamos candidatos antes de elegir la mejor coincidencia.
+
     Cachea para no volver a pedir el mismo jugador en la misma instancia.
     """
-    data = _bdl_get("/players", params={"search": nombre, "per_page": 25})
-    candidatos = data.get("data", [])
+    nombre = (nombre or "").strip()
+    if not nombre:
+        raise ValueError("Nombre vacío.")
+
+    n_low = nombre.lower()
+    tokens = nombre.split()
+
+    # Lista ordenada de intentos (params para _bdl_get).
+    intentos: list[dict] = []
+    if len(tokens) >= 2:
+        # 1) Filtro por last_name (más selectivo, suele ser case-insensitive).
+        intentos.append({"last_name": tokens[-1], "per_page": 25})
+        # 2) Search por el apellido (substring).
+        intentos.append({"search": tokens[-1], "per_page": 25})
+        # 3) Search por el nombre de pila (por si el apellido es raro o compuesto).
+        intentos.append({"search": tokens[0], "per_page": 25})
+    else:
+        # Un solo token: probamos search y last_name.
+        intentos.append({"search": nombre, "per_page": 25})
+        intentos.append({"last_name": nombre, "per_page": 25})
+
+    candidatos: list[dict] = []
+    vistos: set[int] = set()
+
+    for params in intentos:
+        try:
+            data = _bdl_get("/players", params=params)
+        except Exception as exc:
+            log.debug("Búsqueda balldontlie falló con %s: %s", params, exc)
+            continue
+        for c in data.get("data") or []:
+            cid = c.get("id")
+            if cid is None or cid in vistos:
+                continue
+            vistos.add(cid)
+            candidatos.append(c)
+        # Si ya tenemos coincidencia exacta, no hace falta seguir consultando.
+        for c in candidatos:
+            full = f"{c.get('first_name', '')} {c.get('last_name', '')}".strip().lower()
+            if full == n_low:
+                return c
+
     if not candidatos:
         raise ValueError(
             f"Jugador '{nombre}' no aparece en balldontlie. "
             "Comprueba la ortografía (en inglés)."
         )
 
-    n_low = nombre.lower()
-    # Match exacto > contiene apellido > primero que devuelve.
+    # Ranking final: exacto > contiene todos los tokens > primero.
     for c in candidatos:
         full = f"{c.get('first_name', '')} {c.get('last_name', '')}".strip().lower()
         if full == n_low:
