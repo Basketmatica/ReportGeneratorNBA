@@ -723,6 +723,8 @@ def _extraer_stats_completas_espn(
                 if p36:
                     s["per36"] = p36
 
+            # Total real de temporadas en la NBA (antes de cortar a n_temporadas).
+            out["temporadas_totales"] = len(seasons)
             out["temporadas"] = seasons[:n_temporadas]
 
             # Media de carrera real (no aproximada) que ESPN ya pre-calcula.
@@ -862,8 +864,12 @@ def obtener_datos_jugador(nombre_jugador: str) -> Dict[str, Any]:
             stats = {}
 
         seasons = stats.get("temporadas") or []
+        total_temps = stats.get("temporadas_totales") or len(seasons)
         if seasons:
-            logger.info("✓ Recolectadas %d temporadas desde ESPN.", len(seasons))
+            logger.info(
+                "✓ Recolectadas %d temporadas (de %d totales) desde ESPN.",
+                len(seasons), total_temps,
+            )
             ultima = dict(seasons[0])
             ultima.pop("__year", None)
             estadisticas["ultima_temporada"] = ultima
@@ -875,7 +881,7 @@ def obtener_datos_jugador(nombre_jugador: str) -> Dict[str, Any]:
                 anteriores.append(fila)
             estadisticas["temporadas_anteriores"] = anteriores
 
-            bio["Temporadas_NBA"] = str(len(seasons))
+            bio["Temporadas_NBA"] = str(total_temps)
         else:
             logger.warning("ESPN devolvió 0 temporadas per-game para %s.", full_name)
             bio["Temporadas_NBA"] = "–"
