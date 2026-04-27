@@ -1,110 +1,181 @@
+from __future__ import annotations
+
+import logging
 import os
 import tempfile
-import logging
+from pathlib import Path
 
-from fastapi import FastAPI, Query, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
-from report_player import generar_pdf_jugador
+# ─── Logging (UNA sola configuración global) ─────────────────────────────────
 
-# ─── Configuración ────────────────────────────────────────────────────────────
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s │ %(levelname)-7s │ %(name)s │ %(message)s",
+    datefmt="%H:%M:%S",
+)
+logger = logging.getLogger("nba-report")
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s │ %(message)s")
-logger = logging.getLogger(__name__)
+# Importamos DESPUÉS de configurar logging para que los módulos hereden el formato.
+from report_player import GEMINI_MODEL, generar_pdf_jugador  # noqa: E402
+
+
+# ─── App ──────────────────────────────────────────────────────────────────────
 
 app = FastAPI(
     title="NBA Report Generator",
     description=(
-        "Genera informes PDF profesionales de jugadores de la NBA "
-        "usando datos oficiales de la NBA y análisis con IA."
+        "Genera informes PDF profesionales de jugadores de la NBA usando "
+        "datos de balldontlie + cdn.nba.com (compatible con Render) y "
+        "análisis con Google Gemini."
     ),
-    version="2.0.0",
+    version="3.0.0",
 )
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET"],
     allow_headers=["*"],
 )
 
 
 # ─── Endpoints ────────────────────────────────────────────────────────────────
 
+
 @app.get("/", include_in_schema=False)
-def root():
+def root() -> dict:
     return {
         "status": "ok",
-        "mensaje": "NBA Report Generator activo. Usa /generate-pdf/?player_name=LeBron+James",
+        "mensaje": (
+            "NBA Report Generator activo. "
+            "Usa /generate-pdf/?player_name=LeBron+James"
+        ),
         "docs": "/docs",
+        "health": "/health",
     }
 
 
 @app.get("/health")
-def health_check():
-    """Comprueba que el servicio está en línea."""
-    return {"status": "ok"}
+def health_check() -> dict:
+    """
+    Health check con información de configuración.
+
+    Devuelve ``status: ok`` solo si todas las claves necesarias están presentes.
+    Útil para validar el deployment antes de empezar a usarlo.
+    """
+    api_key = bool(os.getenv("API_KEY", "").strip())
+    bdl_key = bool(os.getenv("BALLDONTLIE_API_KEY", "").strip())
+    ok = api_key and bdl_key
+    return {
+        "status": "ok" if ok else "missing_config",
+        "google_gemini_api_key": "configured" if api_key else "MISSING (env API_KEY)",
+        "balldontlie_api_key": (
+            "configured" if bdl_key else "MISSING (env BALLDONTLIE_API_KEY)"
+        ),
+        "gemini_model": GEMINI_MODEL,
+    }
+
+
+def _safe_filename(name: str) -> str:
+    """Sanitiza un nombre para usarlo en una cabecera Content-Disposition."""
+    cleaned = "".join(c if c.isalnum() or c in " -_." else "_" for c in name)
+    return cleaned.strip() or "Player"
 
 
 @app.get("/generate-pdf/")
 def generate_pdf(
+    background_tasks: BackgroundTasks,
     player_name: str = Query(
         ...,
-        description="Nombre del jugador en inglés (ej. 'LeBron James', 'Stephen Curry')",
+        description=(
+            "Nombre del jugador en inglés "
+            "(p.ej. 'LeBron James', 'Stephen Curry')."
+        ),
         min_length=2,
         max_length=80,
-    )
+    ),
 ):
     """
-    Genera y devuelve un informe PDF del jugador indicado.
+    Genera y devuelve el informe PDF del jugador indicado.
 
-    - **player_name**: nombre del jugador en inglés.
-    - Devuelve un fichero PDF listo para descargar.
-    - Código 404 si el jugador no existe en la base de datos de la NBA.
-    - Código 503 si hay un problema temporal con la API de la NBA.
-    - Código 500 para otros errores internos.
+    Códigos de respuesta:
+      - **200**: PDF devuelto.
+      - **404**: jugador no encontrado.
+      - **500**: error de configuración (faltan env vars) o error inesperado.
+      - **503**: error transitorio con la API externa (balldontlie / Gemini).
     """
-    logger.info(f"Solicitud recibida: player_name='{player_name}'")
+    logger.info("Solicitud recibida: player_name='%s'", player_name)
+
+    # Crear el fichero temporal y programar su borrado para DESPUÉS de la
+    # respuesta. FileResponse mantendrá el fichero abierto hasta que termine
+    # de transmitirlo, y BackgroundTasks corre tras el envío.
+    tmp_path = Path(tempfile.mkstemp(suffix=".pdf", prefix="nba_report_")[1])
+
+    def _cleanup(path: Path) -> None:
+        try:
+            path.unlink(missing_ok=True)
+            logger.debug("PDF temporal eliminado: %s", path)
+        except OSError as exc:
+            logger.warning("No se pudo eliminar %s: %s", path, exc)
 
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-            tmp_path = tmp.name
+        generar_pdf_jugador(player_name, str(tmp_path))
 
-        generar_pdf_jugador(player_name, tmp_path)
+        background_tasks.add_task(_cleanup, tmp_path)
 
-        safe_name = player_name.replace("/", "-").replace("\\", "-")
         return FileResponse(
-            tmp_path,
+            path=str(tmp_path),
             media_type="application/pdf",
-            filename=f"{safe_name} Report.pdf",
+            filename=f"{_safe_filename(player_name)} Report.pdf",
         )
 
     except ValueError as exc:
-        # Jugador no encontrado en la base de datos de la NBA
-        logger.warning(f"Jugador no encontrado: {exc}")
+        # Jugador no existe.
+        _cleanup(tmp_path)
+        logger.warning("Jugador no encontrado: %s", exc)
         raise HTTPException(status_code=404, detail=str(exc))
 
     except EnvironmentError as exc:
-        # API_KEY no configurada
-        logger.error(f"Error de configuración: {exc}")
+        # Falta API_KEY o BALLDONTLIE_API_KEY.
+        _cleanup(tmp_path)
+        logger.error("Error de configuración: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))
 
     except RuntimeError as exc:
-        # Error al llamar a la API de la NBA (timeout, rate limit, etc.)
-        logger.error(f"Error de API de NBA: {exc}")
+        # Errores transitorios de red / API.
+        _cleanup(tmp_path)
+        logger.error("Error transitorio de API: %s", exc)
         raise HTTPException(
             status_code=503,
             detail=(
-                "No se pudo obtener datos de la API de la NBA. "
+                "No se pudo obtener datos de la API externa. "
                 "Inténtalo de nuevo en unos segundos."
             ),
         )
 
-    except Exception as exc:
-        logger.exception(f"Error inesperado al generar informe para '{player_name}'")
+    except Exception:
+        _cleanup(tmp_path)
+        logger.exception("Error inesperado al generar informe para '%s'", player_name)
         raise HTTPException(
             status_code=500,
-            detail="Error interno al generar el informe. Consulta los logs para más detalles.",
+            detail=(
+                "Error interno al generar el informe. "
+                "Consulta los logs para más detalles."
+            ),
         )
+
+
+# ─── Arranque local / Render ──────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    import uvicorn
+
+    # Render inyecta el puerto en $PORT. En local cae a 8000.
+    port = int(os.getenv("PORT", "8000"))
+    host = os.getenv("HOST", "0.0.0.0")
+    logger.info("Arrancando en http://%s:%d  (modelo Gemini: %s)", host, port, GEMINI_MODEL)
+    uvicorn.run(app, host=host, port=port)
