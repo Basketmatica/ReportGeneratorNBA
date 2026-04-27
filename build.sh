@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
+# Build script para Render.com
 
-# Install Chrome
-wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-apt install -y ./google-chrome-stable_current_amd64.deb
+# Instalar dependencias del sistema para WeasyPrint (renderizado PDF)
+apt-get update -qq
+apt-get install -y -qq \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    libcairo2 \
+    libgdk-pixbuf2.0-0 \
+    libffi-dev \
+    shared-mime-info
 
-# Install ChromeDriver
-CHROME_VERSION=$(google-chrome --version | cut -d ' ' -f 3 | cut -d '.' -f 1)
-DRIVER_VERSION=$(curl -sS "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_VERSION}")
-wget -N "https://chromedriver.storage.googleapis.com/${DRIVER_VERSION}/chromedriver_linux64.zip"
-unzip chromedriver_linux64.zip
-mv chromedriver /usr/local/bin/chromedriver
-chmod +x /usr/local/bin/chromedriver
-
+# Instalar dependencias Python
+pip install --upgrade pip
+pip install -r requirements.txt
