@@ -1,9 +1,15 @@
+# Web framework
 fastapi
-uvicorn
-beautifulsoup4
-selenium
-webdriver-manager
-requests
+uvicorn[standard]
+
+# NBA API oficial (sin scraping, sin bloqueos)
+nba_api
+
+# Generación de PDF
 weasyprint
-google-generativeai
+
+# Google Gemini (nuevo SDK unificado)
+google-genai
+
+# HTTP client (solo para headers NBA si se necesita directamente)
 httpx
