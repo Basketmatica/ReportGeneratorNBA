@@ -40,99 +40,66 @@ A partir del siguiente JSON con información detallada de un jugador de la NBA, 
 {json.dumps(player_data, ensure_ascii=False, indent=2)}
 =========================
 
-ESTRUCTURA OBLIGATORIA (no omitas ningún apartado, aunque los datos sean limitados):
+ESTRUCTURA OBLIGATORIA (no omitas ningún apartado):
 
-1. CABECERA
-   - <img> con la URL de 'Foto' del JSON, flotando a la izquierda (max-width: 160px).
-   - A la derecha: <h2>Reporte Jugador: {nombre}</h2>.
-   - Línea divisoria <hr> tras la cabecera, con color #5c3a21.
+1. CABECERA (Usa Flexbox, NO float)
+   - Contenedor: <div style="display: flex; align-items: center; gap: 24px; border-bottom: 3px solid #1d428a; padding-bottom: 20px; margin-bottom: 30px;">
+   - <img> con la URL de 'Foto' del JSON (style="max-width: 140px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);").
+   - Textos a la derecha: nombre en <h1 style="color: #1d428a; margin: 0 0 8px 0; font-size: 28px;">. Posición, equipo y dorsal en <p style="margin: 0; font-size: 18px; color: #555;">.
 
 2. DATOS PERSONALES
-   - Tabla de 2 columnas con: Equipo, Posición, Altura, Peso, País, Universidad,
-     Draft, Dorsal, Temporadas en NBA. Si "Edad" es "–" no la incluyas.
+   - <h2 style="color: #1d428a; border-bottom: 1px solid #eee; padding-bottom: 8px; margin-top: 0;">Perfil Físico y Draft</h2>
+   - Tabla de 2 columnas con: Equipo, Posición, Altura, Peso, País, Universidad, Draft, Dorsal, Temporadas en NBA. (Omite "Edad" si es "–").
 
 3. ESTADÍSTICAS DESTACADAS
-   - Tabla 'Promedios por partido' con la última temporada disponible: PTS,
-     REB (OR/DR si están), AST, STL, BLK, TO, MIN, FG%, 3P%, FT%, Partidos.
-     Indica el etiquetado de temporada en la cabecera de la tabla.
-   - Si la última temporada incluye 'per36', añade una segunda tabla
-     'Per-36 minutos (última temporada)' con: PTS, REB, AST, STL, BLK, TO.
-     Es útil para contextualizar producción independientemente del minutaje.
-   - Si hay 'temporadas_anteriores' con 2+ temporadas, añade una tabla
-     'Trayectoria reciente' comparativa (una fila por temporada) con
-     PTS/REB/AST/FG%/3P% al menos.
-   - Si hay 'carrera_promedio', añade una tabla 'Promedios de carrera'
-     con los mismos campos que la última temporada. Si hay 'per36' dentro,
-     incluye una columna o tabla complementaria con el per-36 de carrera.
-   - Si hay 'carrera_totales', añade una pequeña tabla 'Totales de carrera'
-     con: Partidos (ya viene de carrera_promedio), PTS totales, REB totales,
-     AST totales, STL totales, BLK totales, FG anotados-intentados,
-     3P anotados-intentados, FT anotados-intentados.
-   - Si hay 'avanzadas_ultima' o 'avanzadas_carrera', añade una tabla
-     'Estadísticas avanzadas' con dos columnas (Última temporada / Carrera)
-     mostrando: Dobles-dobles, Triples-dobles, AST/TO ratio, STL/TO ratio,
-     Eficiencia anotadora, Eficiencia de tiro, Faltas técnicas, Faltas
-     flagrantes. Omite filas sin datos.
-   - Si el JSON contiene la nota '_nota', muéstrala como pie de tabla en
-     cursiva y tamaño pequeño tras todas las tablas estadísticas.
+   - <h2 style="color: #1d428a; border-bottom: 1px solid #eee; padding-bottom: 8px;">Métricas de Rendimiento</h2>
+   - Tabla 'Promedios por partido' (última temporada): PTS, REB, AST, STL, BLK, TO, MIN, FG%, 3P%, FT%, Partidos.
+   - Si hay 'per36' (última temporada), añade tabla 'Per-36 minutos': PTS, REB, AST, STL, BLK, TO.
+   - Si hay 'temporadas_anteriores' (2+), añade tabla 'Trayectoria reciente': Temporada, PTS, REB, AST, FG%, 3P%.
+   - Si hay 'carrera_promedio' y 'carrera_totales', añade tablas correspondientes.
+   - Si hay 'avanzadas_ultima', añade tabla con: Dobles-dobles, Triples-dobles, AST/TO, STL/TO, Eficiencia anotadora, Eficiencia de tiro. Omite filas vacías.
+   - REGLA PARA TABLAS: Las cabeceras de todas las tablas deben tener `style="background-color: #1d428a; color: white; padding: 10px; text-align: center; font-size: 14px;"`. Las celdas de datos `style="padding: 8px; border-bottom: 1px solid #e0e0e0; text-align: center; font-size: 13px; color: #333;"`.
 
 4. RESUMEN DEL DESEMPEÑO
-   - Párrafo de 100-150 palabras, analítico y técnico, fundamentado en los
-     datos. Compara última temporada vs promedios de carrera (mejora,
-     mantenimiento, declive). Si hay per-36, úsalo para juzgar la producción
-     ajustada por minutaje. Si hay AST/TO o eficiencias, comenta lo que
-     dicen sobre control de balón y selección de tiro.
-   - No inventes cifras que no estén en el JSON.
+   - <h2 style="color: #1d428a; border-bottom: 1px solid #eee; padding-bottom: 8px;">Análisis de Desempeño</h2>
+   - Párrafo de 100-150 palabras, analítico y técnico. Compara última temporada vs carrera. Usa per-36 y ratios de eficiencia si están disponibles para juzgar su impacto real.
 
-5. ANÁLISIS FODA en cuadrícula 2×2
-   Usa este HTML exacto para el grid (adaptado a los tonos del logotipo):
-   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-     <section style="border: 1px solid #5c3a21; padding: 10px; border-radius: 4px;">
-       <h3 style="color:#5c3a21;">Fortalezas</h3><ul>...</ul>
+5. ANÁLISIS FODA
+   - Usa EXACTAMENTE este HTML para el grid (asegura un renderizado perfecto en PDF):
+   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px;">
+     <section style="background-color: #f0f8ff; border-left: 4px solid #1d428a; padding: 16px; border-radius: 4px;">
+       <h3 style="color:#1d428a; margin-top: 0; font-size: 16px;">Fortalezas</h3><ul style="margin: 0; padding-left: 20px; font-size: 14px;">...</ul>
      </section>
-     <section style="border: 1px solid #785232; padding: 10px; border-radius: 4px;">
-       <h3 style="color:#785232;">Oportunidades</h3><ul>...</ul>
+     <section style="background-color: #f4fbf5; border-left: 4px solid #28a745; padding: 16px; border-radius: 4px;">
+       <h3 style="color:#28a745; margin-top: 0; font-size: 16px;">Oportunidades</h3><ul style="margin: 0; padding-left: 20px; font-size: 14px;">...</ul>
      </section>
-     <section style="border: 1px solid #8b5e3c; padding: 10px; border-radius: 4px;">
-       <h3 style="color:#8b5e3c;">Debilidades</h3><ul>...</ul>
+     <section style="background-color: #fff9e6; border-left: 4px solid #ffc107; padding: 16px; border-radius: 4px;">
+       <h3 style="color:#b58500; margin-top: 0; font-size: 16px;">Debilidades</h3><ul style="margin: 0; padding-left: 20px; font-size: 14px;">...</ul>
      </section>
-     <section style="border: 1px solid #3d2616; padding: 10px; border-radius: 4px;">
-       <h3 style="color:#3d2616;">Amenazas</h3><ul>...</ul>
+     <section style="background-color: #fdf3f4; border-left: 4px solid #dc3545; padding: 16px; border-radius: 4px;">
+       <h3 style="color:#dc3545; margin-top: 0; font-size: 16px;">Amenazas</h3><ul style="margin: 0; padding-left: 20px; font-size: 14px;">...</ul>
      </section>
    </div>
-   - De 2 a 3 puntos por sección (máx. 25 palabras por punto). Basa todo en
-     los datos del JSON. Aprovecha métricas avanzadas (DD2/TD3/AST-TO/
-     eficiencias) cuando estén disponibles, no te limites a las clásicas.
+   - 2 a 3 puntos por sección (máx. 25 palabras por punto), basados 100% en el JSON.
 
-6. POTENCIAL DE CRECIMIENTO
-   - Párrafo de 80-100 palabras. Si el jugador es veterano (carrera larga
-     según 'carrera_totales'/'Temporadas_NBA'), enfócate en sostenibilidad,
-     adaptación de rol y mantenimiento de eficiencia. Si la última temporada
-     muestra caída en minutos o producción respecto a 'carrera_promedio',
-     menciónalo.
+6. POTENCIAL DE CRECIMIENTO Y JUGADORES SIMILARES
+   - <h2 style="color: #1d428a; border-bottom: 1px solid #eee; padding-bottom: 8px;">Proyección</h2>
+   - Párrafo de 80-100 palabras de potencial (enfocado en rol/sostenibilidad si es veterano).
+   - Seguido de una lista `<ul style="font-size: 14px; line-height: 1.6;">` con 2-3 jugadores comparables y su justificación técnica.
 
-7. JUGADORES SIMILARES
-   - Lista de 2-3 jugadores comparables con breve justificación
-     (físico, estadísticas, rol, estilo).
-
-REGLAS TÉCNICAS:
+REGLAS TÉCNICAS ESTRICTAS:
 - Solo CSS inline. Sin <style>, sin <link>, sin <script>.
-- Fuente: font-family: 'Helvetica Neue', Arial, sans-serif.
-- Colores: texto #1a1a1a, fondo blanco, acento principal #5c3a21 (marrón BASKETMÁTICA).
-- Contenedor principal: <div style="max-width: 800px; margin: 0 auto; padding: 32px; font-family: ...">
-- Tablas: border-collapse: collapse; width: 100%; celdas con padding: 6px 10px;
-  border: 1px solid #e8dcca.
-- Cabeceras de tabla: background: #5c3a21; color: white; font-weight: bold.
-- Si un dato está como "–" en el JSON, escribe simplemente "—" (no inventes).
+- Fuente base: font-family: 'Helvetica Neue', Arial, sans-serif; line-height: 1.5; color: #222;
+- Contenedor principal: <div style="max-width: 850px; margin: 0 auto; padding: 40px; background: white; position: relative;">
+- Tablas: width: 100%; border-collapse: collapse; margin-bottom: 24px;
+- Si un dato está como "–", escribe "—" (no inventes).
 
-LOGO BASKETMÁTICA (esquina inferior derecha):
-<img src="https://basketmatica.wordpress.com/wp-content/uploads/2024/07/logo_basketmatica.png"
-     alt="Logo Basketmática"
-     style="position: fixed; bottom: 20px; right: 20px; width: 80px; opacity: 0.6;" />
+LOGO BASKETMÁTICA:
+<img src="https://basketmatica.wordpress.com/wp-content/uploads/2024/07/logo_basketmatica.png" 
+     alt="Logo Basketmática" 
+     style="position: absolute; top: 40px; right: 40px; width: 90px; opacity: 0.8;" />
 
-RESPUESTA: devuelve ÚNICAMENTE el HTML, sin backticks, sin explicaciones.
-Empieza con <!DOCTYPE html> y cierra con </html>.
-Idioma del informe: ESPAÑOL.
+RESPUESTA: devuelve ÚNICAMENTE el HTML, sin bloques de código (backticks) de Markdown, sin introducciones ni conclusiones. Empieza con <!DOCTYPE html> y cierra con </html>. Idioma: ESPAÑOL.
 """
 
 
@@ -200,10 +167,30 @@ def generar_pdf_jugador(nombre_jugador: str, output_path: str) -> bool:
         model=GEMINI_MODEL,
         contents=generar_prompt_para_llm(player_data),
         config=genai_types.GenerateContentConfig(
-            temperature=0.25,
+            temperature=0.35,
+            # Margen amplio para informes completos (tablas + FODA + análisis).
+            # Gemini 2.5 Flash soporta hasta 65 536 tokens de salida.
             max_output_tokens=32768,
         ),
     )
+
+    # Detectar truncamiento u otros finish_reason no normales antes de seguir,
+    # para no generar PDFs incompletos silenciosamente.
+    candidate = (response.candidates or [None])[0]
+    finish = getattr(getattr(candidate, "finish_reason", None), "name", None) \
+        or str(getattr(candidate, "finish_reason", "") or "")
+    if finish and finish.upper() not in {"STOP", "FINISH_REASON_STOP", ""}:
+        if finish.upper() in {"MAX_TOKENS", "FINISH_REASON_MAX_TOKENS"}:
+            raise RuntimeError(
+                f"Gemini cortó la respuesta por límite de tokens (finish_reason={finish}). "
+                "Sube max_output_tokens o reduce la complejidad del prompt."
+            )
+        if finish.upper() in {"SAFETY", "FINISH_REASON_SAFETY"}:
+            raise RuntimeError(
+                f"Gemini bloqueó la respuesta por filtro de seguridad "
+                f"(finish_reason={finish})."
+            )
+        logger.warning("Gemini terminó con finish_reason=%s (no STOP).", finish)
 
     html_content = _limpiar_html_gemini(response.text or "")
 
@@ -211,6 +198,14 @@ def generar_pdf_jugador(nombre_jugador: str, output_path: str) -> bool:
         raise RuntimeError(
             "Gemini no devolvió HTML válido. Posible filtro de seguridad o "
             "respuesta vacía. Inicio recibido: " + repr(html_content[:120])
+        )
+
+    # Sanity check final: el HTML completo debería cerrar con </html>.
+    if "</html>" not in html_content.lower():
+        logger.warning(
+            "El HTML de Gemini no contiene </html>. Probablemente truncado. "
+            "Tamaño: %d caracteres.",
+            len(html_content),
         )
 
     # 4) Conversión HTML → PDF.
