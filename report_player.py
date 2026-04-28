@@ -44,14 +44,12 @@ ESTRUCTURA OBLIGATORIA (no omitas ningún apartado, aunque los datos sean limita
 
 1. CABECERA
    - <img> con la URL de 'Foto' del JSON, flotando a la izquierda (max-width: 160px).
-   - A la derecha: nombre en <h1> color #1d428a, posición y equipo en <p>.
-   - Línea divisoria <hr> tras la cabecera.
+   - A la derecha: <h2>Reporte Jugador: {nombre}</h2>.
+   - Línea divisoria <hr> tras la cabecera, con color #5c3a21.
 
 2. DATOS PERSONALES
-   - <h2>Reporte Jugador: {nombre}</h2>
    - Tabla de 2 columnas con: Equipo, Posición, Altura, Peso, País, Universidad,
      Draft, Dorsal, Temporadas en NBA. Si "Edad" es "–" no la incluyas.
-   - Cabecera de tabla: fondo #1d428a, texto blanco.
 
 3. ESTADÍSTICAS DESTACADAS
    - Tabla 'Promedios por partido' con la última temporada disponible: PTS,
@@ -87,19 +85,19 @@ ESTRUCTURA OBLIGATORIA (no omitas ningún apartado, aunque los datos sean limita
    - No inventes cifras que no estén en el JSON.
 
 5. ANÁLISIS FODA en cuadrícula 2×2
-   Usa este HTML exacto para el grid:
+   Usa este HTML exacto para el grid (adaptado a los tonos del logotipo):
    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-     <section style="border: 1px solid #1d428a; padding: 10px; border-radius: 4px;">
-       <h3 style="color:#1d428a;">💪 Fortalezas</h3><ul>...</ul>
+     <section style="border: 1px solid #5c3a21; padding: 10px; border-radius: 4px;">
+       <h3 style="color:#5c3a21;">Fortalezas</h3><ul>...</ul>
      </section>
-     <section style="border: 1px solid #28a745; padding: 10px; border-radius: 4px;">
-       <h3 style="color:#28a745;">🚀 Oportunidades</h3><ul>...</ul>
+     <section style="border: 1px solid #785232; padding: 10px; border-radius: 4px;">
+       <h3 style="color:#785232;">Oportunidades</h3><ul>...</ul>
      </section>
-     <section style="border: 1px solid #ffc107; padding: 10px; border-radius: 4px;">
-       <h3 style="color:#856404;">⚠️ Debilidades</h3><ul>...</ul>
+     <section style="border: 1px solid #8b5e3c; padding: 10px; border-radius: 4px;">
+       <h3 style="color:#8b5e3c;">Debilidades</h3><ul>...</ul>
      </section>
-     <section style="border: 1px solid #dc3545; padding: 10px; border-radius: 4px;">
-       <h3 style="color:#dc3545;">🛡️ Amenazas</h3><ul>...</ul>
+     <section style="border: 1px solid #3d2616; padding: 10px; border-radius: 4px;">
+       <h3 style="color:#3d2616;">Amenazas</h3><ul>...</ul>
      </section>
    </div>
    - De 2 a 3 puntos por sección (máx. 25 palabras por punto). Basa todo en
@@ -120,11 +118,11 @@ ESTRUCTURA OBLIGATORIA (no omitas ningún apartado, aunque los datos sean limita
 REGLAS TÉCNICAS:
 - Solo CSS inline. Sin <style>, sin <link>, sin <script>.
 - Fuente: font-family: 'Helvetica Neue', Arial, sans-serif.
-- Colores: texto #1a1a1a, fondo blanco, acento #1d428a (azul NBA).
+- Colores: texto #1a1a1a, fondo blanco, acento principal #5c3a21 (marrón BASKETMÁTICA).
 - Contenedor principal: <div style="max-width: 800px; margin: 0 auto; padding: 32px; font-family: ...">
 - Tablas: border-collapse: collapse; width: 100%; celdas con padding: 6px 10px;
-  border: 1px solid #dee2e6.
-- Cabeceras de tabla: background: #1d428a; color: white; font-weight: bold.
+  border: 1px solid #e8dcca.
+- Cabeceras de tabla: background: #5c3a21; color: white; font-weight: bold.
 - Si un dato está como "–" en el JSON, escribe simplemente "—" (no inventes).
 
 LOGO BASKETMÁTICA (esquina inferior derecha):
