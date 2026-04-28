@@ -85,6 +85,7 @@ ESTRUCTURA OBLIGATORIA (no omitas ningún apartado):
 6. POTENCIAL DE CRECIMIENTO Y JUGADORES SIMILARES
    - <h2 style="color: #1d428a; border-bottom: 1px solid #eee; padding-bottom: 8px;">Proyección</h2>
    - Párrafo de 80-100 palabras de potencial (enfocado en rol/sostenibilidad si es veterano).
+   - <h2 style="color: #1d428a; border-bottom: 1px solid #eee; padding-bottom: 8px;">Jugadores similares</h2>
    - Seguido de una lista `<ul style="font-size: 14px; line-height: 1.6;">` con 2-3 jugadores comparables y su justificación técnica.
 
 REGLAS TÉCNICAS ESTRICTAS:
