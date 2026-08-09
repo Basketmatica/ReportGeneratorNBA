@@ -894,7 +894,7 @@ def obtener_datos_jugador(nombre_jugador: str) -> Dict[str, Any]:
     if espn_id and not _url_imagen_valida(bio["Foto"]):
         bio["Foto"] = ESPN_HEADSHOT_URL.format(espn_id=espn_id)
 
-        return {
-            "Datos personales": bio,
-            "Estadísticas": estadisticas,
-        }
+    return {
+        "Datos personales": bio,
+        "Estadísticas": estadisticas,
+    }
