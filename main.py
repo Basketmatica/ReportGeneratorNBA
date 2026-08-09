@@ -9,6 +9,11 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+from fastapi import Request
+
 # ─── Logging (UNA sola configuración global) ─────────────────────────────────
 
 logging.basicConfig(
@@ -36,8 +41,11 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=[
+        "https://basketmatica.com",
+        "https://www.basketmatica.com",
+        "http://localhost:4321",  # dev de Astro
+    ],
     allow_methods=["GET"],
     allow_headers=["*"],
 )
@@ -85,9 +93,13 @@ def _safe_filename(name: str) -> str:
     cleaned = "".join(c if c.isalnum() or c in " -_." else "_" for c in name)
     return cleaned.strip() or "Player"
 
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 @app.get("/generate-pdf/")
 def generate_pdf(
+    request: Request,
     background_tasks: BackgroundTasks,
     player_name: str = Query(
         ...,
@@ -113,7 +125,9 @@ def generate_pdf(
     # Crear el fichero temporal y programar su borrado para DESPUÉS de la
     # respuesta. FileResponse mantendrá el fichero abierto hasta que termine
     # de transmitirlo, y BackgroundTasks corre tras el envío.
-    tmp_path = Path(tempfile.mkstemp(suffix=".pdf", prefix="nba_report_")[1])
+    fd, tmp_name = tempfile.mkstemp(suffix=".pdf", prefix="nba_report_")
+    os.close(fd)
+    tmp_path = Path(tmp_name)
 
     def _cleanup(path: Path) -> None:
         try:

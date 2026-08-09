@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import os
 import time
-from datetime import datetime
 from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
@@ -239,7 +238,7 @@ def _bdl_buscar_jugador(nombre: str) -> Dict[str, Any]:
         try:
             data = _bdl_get("/players", params=params)
         except Exception as exc:
-            log.debug("Búsqueda balldontlie falló con %s: %s", params, exc)
+            logger.warning("Búsqueda balldontlie falló con %s: %s", params, exc)
             continue
         for c in data.get("data") or []:
             cid = c.get("id")
@@ -328,16 +327,6 @@ def _safe_float(v: Any) -> Optional[float]:
         return None
 
 
-def _temporada_actual_nba() -> int:
-    """
-    Devuelve el año de inicio de la temporada NBA en curso.
-    La temporada NBA arranca en octubre, así que de Oct→Dic es `año actual`,
-    y de Ene→Sep es `año actual - 1`.
-    """
-    hoy = datetime.utcnow()
-    return hoy.year if hoy.month >= 10 else hoy.year - 1
-
-
 def _espn_get(url: str, params: Optional[dict] = None, retries: int = 2) -> Optional[dict]:
     """
     GET genérico contra ESPN con reintentos suaves. Devuelve None ante cualquier
@@ -416,20 +405,6 @@ def _espn_buscar_atleta_id(nombre: str) -> Optional[str]:
 
     n_low = nombre.lower()
 
-    def es_jugador_nba(c: dict) -> bool:
-        # Filtrado tolerante: aceptamos si menciona basketball/nba en algún campo.
-        sport = str(c.get("sport") or "").lower()
-        league = str(c.get("league") or "").lower()
-        leagues = c.get("leagues") or []
-        if isinstance(leagues, list) and any(
-            "nba" in str(l).lower() for l in leagues
-        ):
-            return True
-        if "basketball" in sport or "nba" in league:
-            return True
-        # Si no se puede determinar, no descartamos.
-        return True
-
     def display_name(c: dict) -> str:
         for k in ("displayName", "fullName", "name", "nameAbbr"):
             v = c.get(k)
@@ -446,16 +421,12 @@ def _espn_buscar_atleta_id(nombre: str) -> Optional[str]:
 
     # 1) Match exacto.
     for c in candidatos:
-        if not es_jugador_nba(c):
-            continue
         if display_name(c).lower() == n_low:
             aid = athlete_id(c)
             if aid:
                 return aid
     # 2) Contiene todos los tokens.
     for c in candidatos:
-        if not es_jugador_nba(c):
-            continue
         nm = display_name(c).lower()
         if all(t in nm for t in n_low.split()):
             aid = athlete_id(c)
@@ -463,10 +434,9 @@ def _espn_buscar_atleta_id(nombre: str) -> Optional[str]:
                 return aid
     # 3) Primer atleta razonable.
     for c in candidatos:
-        if es_jugador_nba(c):
-            aid = athlete_id(c)
-            if aid:
-                return aid
+        aid = athlete_id(c)
+        if aid:
+            return aid
     return None
 
 
@@ -913,11 +883,18 @@ def obtener_datos_jugador(nombre_jugador: str) -> Dict[str, Any]:
         bio["Temporadas_NBA"] = "–"
 
     # Sustituir foto por la de ESPN si tenemos su ID y la NBA falla en el
-    # futuro; cdn.nba.com sigue siendo la primera opción.
-    if espn_id and not bio["Foto"]:
+    def _url_imagen_valida(url: str) -> bool:
+        """HEAD rápido: evita meter en el PDF una imagen que devuelve 404."""
+        try:
+            r = httpx.head(url, timeout=httpx.Timeout(5.0), follow_redirects=True)
+            return r.status_code == 200
+        except httpx.HTTPError:
+            return False
+
+    if espn_id and not _url_imagen_valida(bio["Foto"]):
         bio["Foto"] = ESPN_HEADSHOT_URL.format(espn_id=espn_id)
 
-    return {
-        "Datos personales": bio,
-        "Estadísticas": estadisticas,
-    }
+        return {
+            "Datos personales": bio,
+            "Estadísticas": estadisticas,
+        }

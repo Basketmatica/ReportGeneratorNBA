@@ -14,3 +14,5 @@ weasyprint>=62.0,<70.0
 
 # ── Google Gemini (SDK unificado) ──
 google-genai>=1.0.0,<2.0.0
+
+slowapi>=0.1.9,<0.2.0
