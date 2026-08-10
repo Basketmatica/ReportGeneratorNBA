@@ -81,7 +81,13 @@ Devuelve EXACTAMENTE este esquema JSON (sin campos extra, sin Markdown):
   ]
 }}
 
-Reglas: básate al 100% en los datos del JSON; no inventes lesiones, contratos ni contexto de mercado; si un dato es "–", ignóralo."""
+REGLAS DE RIGOR (obligatorias, prevalecen sobre todo lo demás):
+1. Compara SOLO pares de valores que estén AMBOS en el JSON. Si el homólogo de carrera de una métrica no existe, NO compares: describe el valor en solitario. Prohibido citar cualquier número que no aparezca literalmente en el JSON (p.ej. per36 de temporada vs per36 de carrera, AST_TO de temporada vs de carrera, ya calculados).
+2. Direccionalidad: TOV% y Pérdidas significan mejor cuanto MÁS BAJOS. TS%, eFG%, AST%, %2P, %3P, %TL y AST/BP significan mejor cuanto más altos. Un TOV% bajo (<13) en un exterior con AST% alto es seguridad de balón de élite: FORTALEZA, jamás debilidad.
+3. No hay rankings de liga en estos datos: evita calificativos absolutos salvo que un número del JSON lo haga evidente; prefiere describir.
+4. Temporadas con PJ < 15 son muestra no significativa: exclúyelas de tendencias y no cites sus porcentajes.
+5. Prohibido mencionar defensa, lesiones, contratos, vestuario o minutos futuros si el JSON no contiene un dato que lo respalde. Cada punto del FODA debe citar al menos un número del JSON.
+6. En la tendencia de la trayectoria: di meseta, descenso o mejora según los números reales, no la narrativa amable. Un pico anterior seguido de valores menores es meseta o leve descenso, no "mejora"."""
 
 
 # ─── Render HTML determinista ─────────────────────────────────────────────────
@@ -166,6 +172,134 @@ def _h2(texto: str) -> str:
         f'padding-bottom:8px;font-size:19px;margin-top:28px;">{_e(texto)}</h2>'
     )
 
+# ─── Derivadas y saneado (todo aritmética sobre datos reales) ─────────────────
+
+def _f(v: Any) -> Optional[float]:
+    """'26.6' | '51.3%' | '34.0' → float. None si no es numérico."""
+    s = str(v if v is not None else "").strip().replace("%", "").strip()
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+_P36_CAMPOS = ["Puntos", "Rebotes", "Asistencias", "Robos", "Tapones", "Pérdidas"]
+
+
+def _per36_de(stats: Dict[str, Any]) -> Dict[str, str]:
+    minutos = _f(stats.get("Minutos"))
+    if not minutos or minutos <= 0:
+        return {}
+    factor = 36.0 / minutos
+    out: Dict[str, str] = {}
+    for campo in _P36_CAMPOS:
+        v = _f(stats.get(campo))
+        if v is not None:
+            out[campo] = f"{v * factor:.1f}"
+    return out
+
+
+def _ast_to_de(stats: Dict[str, Any]) -> Optional[str]:
+    ast, to = _f(stats.get("Asistencias")), _f(stats.get("Pérdidas"))
+    if ast is None or not to:
+        return None
+    return f"{ast / to:.1f}"
+
+
+# Claves candidatas para convertidos/intentados (según cómo los exponga nba_data).
+_KEYS_FGM = ("FGM", "TC_conv", "Tiros_convertidos")
+_KEYS_FGA = ("FGA", "TC_int", "Tiros_intentados")
+_KEYS_3PA = ("3PA", "FG3A", "T3_int", "Triples_intentados")
+_KEYS_FTA = ("FTA", "TL_int", "Libres_intentados")
+_KEYS_FTM = ("FTM", "TL_conv", "Libres_convertidos")
+_KEYS_3PM = ("3PM", "FG3M", "T3_conv", "Triples_convertidos")
+
+
+def _get_any(stats: Dict[str, Any], keys) -> Optional[float]:
+    for k in keys:
+        if k in stats:
+            return _f(stats.get(k))
+    return None
+
+
+def _eficiencias_tiro(stats: Dict[str, Any]) -> Dict[str, str]:
+    """
+    TS%, eFG%, 3PAr y FTr con las fórmulas estándar, SOLO si los intentos
+    están en los datos. Si nba_data no expone FGA/3PA/FTA, devuelve {} y la
+    tabla simplemente no aparece (nunca se estima ni inventa).
+      TS%  = PTS / (2 * (FGA + 0.44 * FTA))
+      eFG% = (FGM + 0.5 * 3PM) / FGA
+    """
+    pts = _f(stats.get("Puntos"))
+    fga = _get_any(stats, _KEYS_FGA)
+    fta = _get_any(stats, _KEYS_FTA)
+    fgm = _get_any(stats, _KEYS_FGM)
+    tpm = _get_any(stats, _KEYS_3PM)
+    tpa = _get_any(stats, _KEYS_3PA)
+    out: Dict[str, str] = {}
+    if pts is not None and fga and fta is not None and (fga + 0.44 * fta) > 0:
+        out["TS% (calculado)"] = f"{100 * pts / (2 * (fga + 0.44 * fta)):.1f}%"
+    if fgm is not None and tpm is not None and fga:
+        out["eFG% (calculado)"] = f"{100 * (fgm + 0.5 * tpm) / fga:.1f}%"
+    if tpa is not None and fga:
+        out["3PAr (calculado)"] = f"{100 * tpa / fga:.1f}%"
+    if fta is not None and fga:
+        out["FTr (calculado)"] = f"{100 * fta / fga:.1f}%"
+    if fga is not None:
+        out["Tiros de campo int./partido"] = f"{fga:.1f}"
+    if tpa is not None:
+        out["Triples int./partido"] = f"{tpa:.1f}"
+    return out
+
+
+# Whitelist ESPN: acumulados con valor de scouting y ratios interpretables.
+# Fuera: disciplinarias (no discriminan) y eficiencias sin definición pública.
+_AVANZADAS_NBA_OK = {"Dobles_dobles", "Triples_dobles", "AST_TO_ratio"}
+
+
+def preparar_datos(player_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Enriquecimiento + saneado previo a prompt y render (misma vista para ambos):
+      * per-36 y AST/TO de CARRERA calculados (evita que el modelo se invente
+        el homólogo de carrera al comparar).
+      * AST/TO de la última temporada calculado.
+      * Eficiencias de tiro calculadas si hay intentos en los datos.
+      * Avanzadas ESPN filtradas por whitelist.
+    """
+    data = json.loads(json.dumps(player_data))  # deep copy
+    est = data.get("Estadísticas", {})
+
+    ult = est.get("ultima_temporada") or {}
+    if ult:
+        if not ult.get("per36"):
+            p36 = _per36_de(ult)
+            if p36:
+                ult["per36"] = p36
+        at = _ast_to_de(ult)
+        if at:
+            ult["AST_TO (calculado)"] = at
+        ef = _eficiencias_tiro(ult)
+        if ef:
+            ult["eficiencia_tiro_calculada"] = ef
+
+    carrera = est.get("carrera_promedio") or {}
+    if carrera:
+        p36c = _per36_de(carrera)
+        if p36c:
+            carrera["per36"] = p36c
+        atc = _ast_to_de(carrera)
+        if atc:
+            carrera["AST_TO (calculado)"] = atc
+
+    avanz = est.get("avanzadas_ultima") or {}
+    if avanz:
+        limpio = {k: v for k, v in avanz.items() if k in _AVANZADAS_NBA_OK}
+        if limpio:
+            est["avanzadas_ultima"] = limpio
+        else:
+            est.pop("avanzadas_ultima", None)
+
+    return data
 
 def render_html(player_data: Dict[str, Any], analisis: Dict[str, Any]) -> str:
     bio = player_data.get("Datos personales", {})
@@ -217,6 +351,16 @@ def render_html(player_data: Dict[str, Any], analisis: Dict[str, Any]) -> str:
         if p36:
             cab, fila = _fila_stats(p36, _ORDEN_P36)
             stats_html += _tabla("Per-36 minutos (calculado)", [fila], cab)
+        filas_ef = []
+        ef = ult.get("eficiencia_tiro_calculada") or {}
+        for k, v in ef.items():
+            filas_ef.append([k, v])
+        if ult.get("AST_TO (calculado)"):
+            filas_ef.append(["AST/TO (calculado)", ult["AST_TO (calculado)"]])
+        if filas_ef:
+            stats_html += _tabla(
+                "Eficiencia y volumen de tiro", filas_ef, ["Métrica", "Valor"]
+            )
 
     anteriores = est.get("temporadas_anteriores") or []
     if len(anteriores) >= 2:
@@ -234,6 +378,10 @@ def render_html(player_data: Dict[str, Any], analisis: Dict[str, Any]) -> str:
     if carrera:
         cab, fila = _fila_stats(carrera, _ORDEN_PG)
         stats_html += _tabla("Promedios de carrera", [fila], cab)
+        p36c = carrera.get("per36") or {}
+        if p36c:
+            cab, fila = _fila_stats(p36c, _ORDEN_P36)
+            stats_html += _tabla("Per-36 de carrera (calculado)", [fila], cab)
 
     avanz = est.get("avanzadas_ultima") or {}
     if avanz:
@@ -242,7 +390,7 @@ def render_html(player_data: Dict[str, Any], analisis: Dict[str, Any]) -> str:
             for k, v in avanz.items()
             if not k.startswith(("_", "Temporada")) and v not in ("", "–", None)
         ]
-        stats_html += _tabla("Estadísticas avanzadas (última temporada)", filas)
+        stats_html += _tabla("Acumulados destacados (última temporada)", filas)
 
     # Análisis del LLM
     analisis_html = (
@@ -298,6 +446,8 @@ def generar_pdf_jugador_nba(
 
     if player_data is None:
         player_data = obtener_datos_jugador(nombre_jugador)
+
+    player_data = preparar_datos(player_data)
 
     analisis = generar_json(
         _prompt_analisis(player_data),
