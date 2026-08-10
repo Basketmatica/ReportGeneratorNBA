@@ -9,7 +9,7 @@ Cambio de arquitectura respecto a la versión FastAPI/Render:
     del PDF no pasan por el modelo (imposible alucinarlos) y cabemos en los
     límites de tokens de cualquier free tier (Groq, OpenRouter…).
   * Devuelve bytes (para st.download_button), sin ficheros temporales.
-  * Identidad visual Basketmática (crema/teja), coherente con el generador ACB.
+  * Identidad visual Basketmática (BG/teja), coherente con el generador ACB.
 """
 
 from __future__ import annotations
@@ -98,7 +98,7 @@ def _tabla(titulo: str, filas: List[List[str]], cabecera: Optional[List[str]] = 
     th = ""
     if cabecera:
         celdas = "".join(
-            f'<th style="background-color:{TINTA};color:{CREMA};padding:9px;'
+            f'<th style="background-color:{COURT};color:{COURT_INK};padding:9px;'
             f'text-align:center;font-size:12.5px;letter-spacing:1px;">{_e(c)}</th>'
             for c in cabecera
         )
@@ -106,13 +106,13 @@ def _tabla(titulo: str, filas: List[List[str]], cabecera: Optional[List[str]] = 
     trs = ""
     for fila in filas:
         tds = "".join(
-            f'<td style="padding:8px;border-bottom:1px solid {LINEA};'
-            f'text-align:center;font-size:13px;color:{TINTA};">{_e(c)}</td>'
+            f'<td style="padding:8px;border-bottom:1px solid {LINE};'
+            f'text-align:center;font-size:13px;color:{INK};">{_e(c)}</td>'
             for c in fila
         )
         trs += f"<tr>{tds}</tr>"
     return (
-        f'<h3 style="color:{TINTA};font-size:15px;margin:18px 0 8px;">{_e(titulo)}</h3>'
+        f'<h3 style="color:{INK};font-size:15px;margin:18px 0 8px;">{_e(titulo)}</h3>'
         f'<table style="width:100%;border-collapse:collapse;margin-bottom:20px;">{th}{trs}</table>'
     )
 
@@ -138,10 +138,10 @@ def _fila_stats(stats: Dict[str, Any], orden: List) -> (List[str], List[str]):
 
 def _seccion_foda(foda: Dict[str, List[str]]) -> str:
     bloques = [
-        ("Fortalezas", VERDE, foda.get("fortalezas") or []),
-        ("Oportunidades", MARRON, foda.get("oportunidades") or []),
-        ("Debilidades", ROJO, foda.get("debilidades") or []),
-        ("Amenazas", TINTA_2, foda.get("amenazas") or []),
+        ("Fortalezas", FODA_FORTALEZAS, foda.get("fortalezas") or []),
+        ("Oportunidades", FODA_OPORTUNIDADES, foda.get("oportunidades") or []),
+        ("Debilidades", FODA_DEBILIDADES, foda.get("debilidades") or []),
+        ("Amenazas", FODA_AMENAZAS, foda.get("amenazas") or []),
     ]
     secciones = ""
     for titulo, color, puntos in bloques:
@@ -162,7 +162,7 @@ def _seccion_foda(foda: Dict[str, List[str]]) -> str:
 
 def _h2(texto: str) -> str:
     return (
-        f'<h2 style="color:{TINTA};border-bottom:2px solid {TEJA};'
+        f'<h2 style="font-family:Georgia,serif;color:{INK};border-bottom:2px solid {ACCENT};'
         f'padding-bottom:8px;font-size:19px;margin-top:28px;">{_e(texto)}</h2>'
     )
 
@@ -178,15 +178,15 @@ def render_html(player_data: Dict[str, Any], analisis: Dict[str, Any]) -> str:
         f'style="max-width:150px;border-radius:8px;"/>' if foto else ""
     )
     cabecera = f"""
-    <div style="display:flex;align-items:center;gap:24px;border-bottom:3px solid {TEJA};
+    <div style="display:flex;align-items:center;gap:24px;border-bottom:3px solid {ACCENT};
                 padding-bottom:20px;margin-bottom:26px;">
       {img}
       <div>
-        <h1 style="color:{TINTA};margin:0 0 8px;font-size:28px;letter-spacing:.5px;">{_e(bio.get("Nombre"))}</h1>
-        <p style="margin:0;font-size:16px;color:{TINTA_2};">
+        <h1 style="font-family:Georgia,serif;color:{INK};margin:0 0 8px;font-size:28px;letter-spacing:.5px;">{_e(bio.get("Nombre"))}</h1>
+        <p style="margin:0;font-size:16px;color:{INK_SOFT};">
           {_e(bio.get("Posición"))} · {_e(bio.get("Equipo"))} · Dorsal {_e(bio.get("Dorsal"))}
         </p>
-        <p style="margin:6px 0 0;font-size:11px;color:{TEJA};text-transform:uppercase;letter-spacing:2px;">
+        <p style="margin:6px 0 0;font-size:11px;color:{ACCENT};text-transform:uppercase;letter-spacing:2px;">
           Informe de scouting · NBA
         </p>
       </div>
@@ -264,16 +264,16 @@ def render_html(player_data: Dict[str, Any], analisis: Dict[str, Any]) -> str:
 
     modelo = _e(analisis.get("_modelo", ""))
     pie = (
-        f'<p style="margin-top:32px;padding-top:12px;border-top:1px solid {TEJA};'
-        f'font-size:10.5px;color:{TINTA_2};text-transform:uppercase;letter-spacing:2px;">'
+        f'<p style="margin-top:32px;padding-top:12px;border-top:1px solid {ACCENT};'
+        f'font-size:10.5px;color:{INK_SOFT};text-transform:uppercase;letter-spacing:2px;">'
         f"Basketmática · basketmatica.com · Datos: balldontlie / ESPN · Análisis: {modelo}</p>"
     )
 
     return f"""<!DOCTYPE html>
 <html lang="es"><head><meta charset="utf-8"></head>
-<body style="background-color:{CREMA};margin:0;
-             font-family:'Helvetica Neue',Arial,sans-serif;line-height:1.55;color:{TINTA};">
-  <div style="max-width:850px;margin:0 auto;padding:40px;background-color:{CREMA};position:relative;">
+<body style="background-color:{BG};margin:0;
+             font-family:Georgia,'Times New Roman',serif;line-height:1.55;color:{INK};">
+  <div style="max-width:850px;margin:0 auto;padding:40px;background-color:{BG};position:relative;">
     <img src="{LOGO_URL}" alt="Basketmática"
          style="position:absolute;top:40px;right:40px;width:90px;opacity:.85;"/>
     {cabecera}

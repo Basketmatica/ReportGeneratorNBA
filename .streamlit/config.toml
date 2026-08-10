@@ -2,7 +2,7 @@
 # --accent (teal): rellenos de botón, foco de input, spinner, sliders.
 primaryColor = "#1F8A74"
 
-# --bg: fondo papel/crema.
+# --bg: fondo papel/BG.
 backgroundColor = "#F4EFE5"
 
 # --surface: tarjetas, inputs, expanders. OJO: más CLARO que el fondo,
