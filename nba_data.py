@@ -327,6 +327,8 @@ def _safe_float(v: Any) -> Optional[float]:
         return None
 
 
+
+
 def _espn_get(url: str, params: Optional[dict] = None, retries: int = 2) -> Optional[dict]:
     """
     GET genérico contra ESPN con reintentos suaves. Devuelve None ante cualquier
@@ -746,6 +748,18 @@ def _extraer_stats_completas_espn(
     return out
 
 
+
+def _url_imagen_valida(url: str) -> bool:
+    """HEAD rápido: evita meter en el PDF una imagen rota (404)."""
+    if not url:
+        return False
+    try:
+        r = httpx.head(url, timeout=httpx.Timeout(5.0), follow_redirects=True)
+        return r.status_code == 200
+    except httpx.HTTPError:
+        return False
+
+
 # ─── API pública ──────────────────────────────────────────────────────────────
 
 
@@ -882,15 +896,7 @@ def obtener_datos_jugador(nombre_jugador: str) -> Dict[str, Any]:
         )
         bio["Temporadas_NBA"] = "–"
 
-    # Sustituir foto por la de ESPN si tenemos su ID y la NBA falla en el
-    def _url_imagen_valida(url: str) -> bool:
-        """HEAD rápido: evita meter en el PDF una imagen que devuelve 404."""
-        try:
-            r = httpx.head(url, timeout=httpx.Timeout(5.0), follow_redirects=True)
-            return r.status_code == 200
-        except httpx.HTTPError:
-            return False
-
+    # cdn.nba.com es la primera opción; si su URL devuelve 404, caemos a ESPN.
     if espn_id and not _url_imagen_valida(bio["Foto"]):
         bio["Foto"] = ESPN_HEADSHOT_URL.format(espn_id=espn_id)
 
