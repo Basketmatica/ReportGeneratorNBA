@@ -27,16 +27,26 @@ from nba_data import obtener_datos_jugador
 logger = logging.getLogger(__name__)
 
 # ─── Paleta Basketmática ──────────────────────────────────────────────────────
-CREMA = "#FAF6EE"
-TINTA = "#1A1A1A"
-TINTA_2 = "#6B6B6B"
-TEJA = "#C0562F"
-VERDE = "#4A7B4E"
-ROJO = "#A84438"
-MARRON = "#8B7355"
-LINEA = "#E3DCCB"
+BG = "#F4EFE5"        # --bg
+SURFACE = "#FBF8F0"   # --surface
+LINE = "#E2D8C4"      # --line
+INK = "#221A10"       # --ink
+INK_SOFT = "#6E5E46"  # --ink-soft
+BRAND = "#583C14"     # --brand (espresso: titulares e identidad)
+ACCENT = "#1F8A74"    # --accent (teal: filetes de datos, highlights)
+ACCENT_600 = "#176B5A"
+SPOT = "#E8772E"      # --spot (uso puntual)
+COURT = "#1B140D"     # --court (cabeceras de tabla oscuras)
+COURT_INK = "#EFE8DA" # --court-ink (texto sobre court)
+    
+FODA_FORTALEZAS = ACCENT      # teal: lo que funciona
+FODA_OPORTUNIDADES = SPOT     # naranja balón: energía/potencial
+FODA_DEBILIDADES = "#A8442F"  # ← único color fuera de tus tokens
+FODA_AMENAZAS = INK_SOFT      # marrón apagado: contexto adverso
 
 LOGO_URL = "https://basketmatica.wordpress.com/wp-content/uploads/2024/07/logo_basketmatica.png"
+
+
 
 
 # ─── Prompt de análisis (solo JSON) ───────────────────────────────────────────

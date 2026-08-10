@@ -1,16 +1,3 @@
-"""
-streamlit_app.py — Generador de Reportes NBA · Basketmática (versión Streamlit)
-
-Secrets necesarios (Settings → Secrets en Streamlit Cloud):
-
-    BALLDONTLIE_API_KEY = "..."          # datos bio (gratis, app.balldontlie.io)
-    GROQ_API_KEY = "..."                 # análisis LLM (gratis, console.groq.com)
-    # Fallbacks opcionales:
-    # OPENROUTER_API_KEY = "..."
-    # API_KEY = "..."                    # Gemini (si tu cuenta antigua conserva free tier)
-    # LLM_PROVIDERS = "groq,openrouter,gemini"
-"""
-
 from __future__ import annotations
 
 import logging
@@ -31,39 +18,142 @@ from llm_client import cargar_proveedores  # noqa: E402
 from nba_data import obtener_datos_jugador  # noqa: E402
 from report_nba import generar_pdf_jugador_nba  # noqa: E402
 
+# ─── Design tokens (espejo de :root en global.css) ────────────────────────────
+BG = "#F4EFE5"
+SURFACE = "#FBF8F0"
+LINE = "#E2D8C4"
+INK = "#221A10"
+INK_SOFT = "#6E5E46"
+BRAND = "#583C14"
+BRAND_600 = "#6F4F22"
+ACCENT = "#1F8A74"
+ACCENT_600 = "#176B5A"
+SPOT = "#E8772E"  # uso MUY puntual
+
+FONT_DISPLAY = "'Space Grotesk', ui-sans-serif, system-ui, sans-serif"
+FONT_BODY = "'Source Serif 4', Georgia, 'Times New Roman', serif"
+FONT_MONO = "'IBM Plex Mono', ui-monospace, Consolas, monospace"
+
 st.set_page_config(
     page_title="Generador de Reportes NBA · Basketmática",
     page_icon="🏀",
     layout="centered",
+    initial_sidebar_state="collapsed",
 )
-
-CREMA, TINTA, TINTA_2, TEJA = "#FAF6EE", "#1A1A1A", "#6B6B6B", "#C0562F"
 
 st.markdown(
     f"""
     <style>
-      .stApp {{ background-color: {CREMA}; }}
-      h1, h2, h3, p, label, span {{ color: {TINTA}; }}
+      @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap');
+
+      /* ── Chrome de Streamlit fuera: dentro del iframe delata la app ajena ── */
+      #MainMenu, footer, header[data-testid="stHeader"],
+      [data-testid="stDecoration"], .stAppDeployButton {{ display: none !important; }}
+
+      .block-container {{
+        padding-top: 1.2rem !important;
+        padding-bottom: 1.2rem !important;
+        max-width: 620px;
+      }}
+
+      /* ── Los dos dialectos: EDITORIAL (serif) para prosa, DATO (sans) para UI ── */
+      html, body, [data-testid="stAppViewContainer"], p, li {{
+        font-family: {FONT_BODY};
+      }}
+      label, .stButton button, .stDownloadButton button,
+      .bm-kicker, .bm-title, .bm-meta, [data-testid="stExpander"] summary {{
+        font-family: {FONT_DISPLAY} !important;
+      }}
+      code, pre, .stJson {{ font-family: {FONT_MONO} !important; }}
+
+      /* ── Cabecera del módulo ── */
       .bm-kicker {{
-        color: {TEJA}; text-transform: uppercase; letter-spacing: 2.5px;
-        font-size: 0.78rem; font-weight: 600; margin-bottom: 0.2rem;
+        color: {ACCENT_600};
+        text-transform: uppercase;
+        letter-spacing: 2.5px;
+        font-size: .72rem;
+        font-weight: 700;
+        margin: 0 0 .2rem;
       }}
-      .bm-sub {{ color: {TINTA_2}; font-size: 0.95rem; }}
-      div.stButton > button, div.stDownloadButton > button {{
-        background-color: {TEJA}; color: {CREMA}; border: none;
-        font-weight: 700; width: 100%; padding: 0.6rem;
+      .bm-title {{
+        font-size: 1.35rem;
+        font-weight: 700;
+        color: {BRAND};
+        margin: 0 0 1.1rem;
+        padding-bottom: .6rem;
+        border-bottom: 2px solid {ACCENT};
       }}
-      div.stButton > button:hover, div.stDownloadButton > button:hover {{
-        background-color: #A34724; color: {CREMA};
+
+      /* ── Inputs ── */
+      .stTextInput input {{
+        background: {SURFACE};
+        border: 1px solid {LINE};
+        border-radius: 10px;
+        color: {INK};
       }}
+      .stTextInput input:focus {{
+        border-color: {ACCENT};
+        box-shadow: 0 0 0 2px rgba(31, 138, 116, .20);
+      }}
+      .stTextInput input::placeholder {{ color: {INK_SOFT}; opacity: .75; }}
+
+      /* ── Botones: teal genera, espresso descarga (jerarquía del flujo) ── */
+      .stButton button, .stDownloadButton button {{
+        border: none !important;
+        border-radius: 10px;
+        font-weight: 700;
+        letter-spacing: .3px;
+        width: 100%;
+        padding: .62rem;
+        transition: background .15s ease;
+      }}
+      .stButton button {{ background: {ACCENT} !important; color: {SURFACE} !important; }}
+      .stButton button:hover {{ background: {ACCENT_600} !important; }}
+      .stDownloadButton button {{ background: {BRAND} !important; color: {SURFACE} !important; }}
+      .stDownloadButton button:hover {{ background: {BRAND_600} !important; }}
+
+      /* ── Alerts: filete de marca en vez de las cajas azules de Streamlit ── */
+      [data-testid="stAlert"] {{
+        background: {SURFACE} !important;
+        border: 1px solid {LINE} !important;
+        border-left: 3px solid {ACCENT} !important;
+        border-radius: 10px;
+        color: {INK} !important;
+      }}
+      /* Errores: el naranja spot es el único sitio donde tiene sentido aquí. */
+      [data-testid="stAlert"]:has([data-testid="stAlertContentError"]) {{
+        border-left-color: {SPOT} !important;
+      }}
+
+      .bm-meta {{ font-size: .82rem; color: {INK_SOFT}; margin: .2rem 0 .8rem; }}
+
       .bm-nota {{
-        border-left: 3px solid {TEJA}; padding: 0.6rem 1rem;
-        background: #F2EDE0; font-size: 0.85rem; color: {TINTA_2};
+        border: 1px solid {LINE};
+        border-left: 3px solid {LINE};
+        border-radius: 10px;
+        padding: .6rem .9rem;
+        background: {SURFACE};
+        font-size: .8rem;
+        color: {INK_SOFT};
+        margin-top: 1.4rem;
+        line-height: 1.55;
       }}
+
+      [data-testid="stExpander"] details {{
+        border: 1px solid {LINE};
+        border-radius: 10px;
+        background: {SURFACE};
+      }}
+
+      /* ── Spinner en acento ── */
+      .stSpinner > div {{ border-top-color: {ACCENT} !important; }}
     </style>
     """,
     unsafe_allow_html=True,
 )
+
+
+# ─── Cachés y utilidades ──────────────────────────────────────────────────────
 
 
 @st.cache_data(ttl=60 * 60 * 6, show_spinner=False)
@@ -78,14 +168,10 @@ def _safe_filename(name: str) -> str:
     return s or "Player"
 
 
-st.markdown('<p class="bm-kicker">Basketmática · Herramientas</p>', unsafe_allow_html=True)
-st.title("Generador de Reportes NBA")
-st.markdown(
-    '<p class="bm-sub">Introduce el nombre de un jugador de la NBA (en inglés) '
-    "y obtén un scouting report en PDF: perfil, estadísticas, per-36, FODA y "
-    "proyección.</p>",
-    unsafe_allow_html=True,
-)
+# ─── UI ───────────────────────────────────────────────────────────────────────
+
+st.markdown('<p class="bm-kicker">Basketmática · Herramienta</p>', unsafe_allow_html=True)
+st.markdown('<p class="bm-title">Genera tu reporte</p>', unsafe_allow_html=True)
 
 with st.form("form-reporte"):
     nombre = st.text_input(
@@ -101,8 +187,9 @@ if enviar:
         st.error("Escribe un nombre válido (mínimo 2 caracteres).")
         st.stop()
 
-    # balldontlie: la lee nba_data vía env; en Streamlit la inyectamos desde secrets.
-    bdl = str(st.secrets.get("BALLDONTLIE_API_KEY", os.getenv("BALLDONTLIE_API_KEY", ""))).strip()
+    bdl = str(
+        st.secrets.get("BALLDONTLIE_API_KEY", os.getenv("BALLDONTLIE_API_KEY", ""))
+    ).strip()
     if bdl:
         os.environ["BALLDONTLIE_API_KEY"] = bdl
 
@@ -113,13 +200,17 @@ if enviar:
             data = datos_jugador(nombre.lower())
 
         dp = data.get("Datos personales", {})
-        st.success(f"Encontrado: **{dp.get('Nombre', nombre)}** · {dp.get('Equipo', '—')}")
+        st.markdown(
+            f'<p class="bm-meta"><strong>{dp.get("Nombre", nombre)}</strong> · '
+            f'{dp.get("Equipo", "—")} · {dp.get("Posición", "—")}</p>',
+            unsafe_allow_html=True,
+        )
 
         with st.spinner("Redactando el análisis y montando el PDF… (~10-25 s)"):
             pdf = generar_pdf_jugador_nba(nombre, proveedores, player_data=data)
 
         st.download_button(
-            label="⬇️ Descargar informe PDF",
+            label="⬇  Descargar informe PDF",
             data=pdf,
             file_name=f"{_safe_filename(dp.get('Nombre', nombre))}_Report.pdf",
             mime="application/pdf",
@@ -139,8 +230,8 @@ if enviar:
         st.error("Error interno al generar el informe. Inténtalo de nuevo más tarde.")
 
 st.markdown(
-    '<div class="bm-nota"><strong>Nota:</strong> las tablas del PDF se montan '
-    "directamente desde los datos (balldontlie + ESPN); el modelo de IA solo "
-    "redacta el texto analítico a partir de esos datos.</div>",
+    '<div class="bm-nota">Las tablas del informe se construyen directamente a '
+    "partir de los datos (balldontlie · ESPN). El modelo de IA solo redacta el "
+    "texto analítico sobre esos mismos datos, sin intervenir en las cifras.</div>",
     unsafe_allow_html=True,
 )
