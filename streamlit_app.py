@@ -176,7 +176,7 @@ st.markdown('<p class="bm-title">Genera tu reporte</p>', unsafe_allow_html=True)
 with st.form("form-reporte"):
     nombre = st.text_input(
         "Nombre del jugador",
-        placeholder="Ej. LeBron James, Nikola Jokić, Santi Aldama…",
+        placeholder="Ej. LeBron James, Santi Aldama…",
         max_chars=80,
     )
     enviar = st.form_submit_button("Generar informe PDF")
