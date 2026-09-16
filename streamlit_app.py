@@ -1,5 +1,23 @@
+"""
+streamlit_app.py — Generador de Reportes NBA · Basketmática
+
+Diseñado para vivir EMBEBIDO en basketmatica.com dentro de un iframe.
+El tema base lo define .streamlit/config.toml; aquí va solo lo que config.toml
+no puede: tipografías reales de marca, chrome oculto, espaciados y jerarquía
+de botones.
+
+Secrets (Streamlit Cloud → Settings → Secrets):
+    BALLDONTLIE_API_KEY = "..."        # datos NBA (gratis, app.balldontlie.io)
+    GROQ_API_KEY = "..."               # análisis LLM (gratis, console.groq.com)
+    # Fallbacks opcionales:
+    # OPENROUTER_API_KEY = "..."
+    # API_KEY = "..."                  # Gemini (si tu cuenta antigua conserva free tier)
+    # LLM_PROVIDERS = "groq,openrouter,gemini"
+"""
+
 from __future__ import annotations
 
+import html
 import json
 import logging
 import os
@@ -15,9 +33,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger("nba-report")
 
+from informe_comun import preparar_vista  # noqa: E402
 from llm_client import cargar_proveedores  # noqa: E402
 from nba_data import obtener_datos_jugador  # noqa: E402
-from report_nba import generar_pdf_jugador_nba  # noqa: E402
+from report_nba import COMPETICION, construir_vista, generar_pdf_jugador_nba  # noqa: E402
 
 # ─── Design tokens (espejo de :root en global.css) ────────────────────────────
 BG = "#F4EFE5"
@@ -29,7 +48,7 @@ BRAND = "#583C14"
 BRAND_600 = "#6F4F22"
 ACCENT = "#1F8A74"
 ACCENT_600 = "#176B5A"
-SPOT = "#E8772E"  # uso MUY puntual
+SPOT = "#E8772E"
 
 FONT_DISPLAY = "'Space Grotesk', ui-sans-serif, system-ui, sans-serif"
 FONT_BODY = "'Source Serif 4', Georgia, 'Times New Roman', serif"
@@ -57,7 +76,7 @@ st.markdown(
         max-width: 620px;
       }}
 
-      /* ── Los dos dialectos: EDITORIAL (serif) para prosa, DATO (sans) para UI ── */
+      /* ── Los dos dialectos: EDITORIAL (serif) prosa, DATO (sans) UI ── */
       html, body, [data-testid="stAppViewContainer"], p, li {{
         font-family: {FONT_BODY};
       }}
@@ -98,7 +117,7 @@ st.markdown(
       }}
       .stTextInput input::placeholder {{ color: {INK_SOFT}; opacity: .75; }}
 
-      /* ── Botones: teal genera, espresso descarga (jerarquía del flujo) ── */
+      /* ── Botones: teal genera, espresso descarga ── */
       .stButton button, .stDownloadButton button {{
         border: none !important;
         border-radius: 10px;
@@ -113,7 +132,7 @@ st.markdown(
       .stDownloadButton button {{ background: {BRAND} !important; color: {SURFACE} !important; }}
       .stDownloadButton button:hover {{ background: {BRAND_600} !important; }}
 
-      /* ── Alerts: filete de marca en vez de las cajas azules de Streamlit ── */
+      /* ── Alerts: filete de marca ── */
       [data-testid="stAlert"] {{
         background: {SURFACE} !important;
         border: 1px solid {LINE} !important;
@@ -121,7 +140,6 @@ st.markdown(
         border-radius: 10px;
         color: {INK} !important;
       }}
-      /* Errores: el naranja spot es el único sitio donde tiene sentido aquí. */
       [data-testid="stAlert"]:has([data-testid="stAlertContentError"]) {{
         border-left-color: {SPOT} !important;
       }}
@@ -146,7 +164,6 @@ st.markdown(
         background: {SURFACE};
       }}
 
-      /* ── Spinner en acento ── */
       .stSpinner > div {{ border-top-color: {ACCENT} !important; }}
     </style>
     """,
@@ -164,7 +181,7 @@ def datos_jugador(nombre_normalizado: str):
 
 @st.cache_data(ttl=60 * 60 * 6, max_entries=400, show_spinner=False)
 def informe_pdf(datos_json: str, _proveedores: list) -> bytes:
-    # Clave = datos del jugador: si cambian sus estadísticas, el informe se regenera.
+    # Clave = datos del jugador: si ESPN actualiza sus estadísticas, el informe se regenera.
     return generar_pdf_jugador_nba("", _proveedores, player_data=json.loads(datos_json))
 
 
@@ -172,7 +189,7 @@ def _safe_filename(name: str) -> str:
     s = unicodedata.normalize("NFKD", name)
     s = "".join(c for c in s if not unicodedata.combining(c))
     s = re.sub(r"[^A-Za-z0-9-]+", "_", s).strip("_")
-    return s or "Player"
+    return s or "Jugador"
 
 
 # ─── UI ───────────────────────────────────────────────────────────────────────
@@ -203,13 +220,18 @@ if enviar:
     proveedores = cargar_proveedores({**os.environ, **st.secrets})
 
     try:
-        with st.spinner("Buscando al jugador y descargando estadísticas…"):
+        with st.spinner("Buscando al jugador en balldontlie y ESPN…"):
             data = datos_jugador(nombre.lower())
 
-        dp = data.get("Datos personales", {})
+        vista = preparar_vista(construir_vista(data), COMPETICION)
+        jugador = vista.get("jugador", {})
+        nombre_jugador = jugador.get("Nombre") or nombre
+        temporada = vista.get("temporada", {}).get("etiqueta", "")
         st.markdown(
-            f'<p class="bm-meta"><strong>{dp.get("Nombre", nombre)}</strong> · '
-            f'{dp.get("Equipo", "—")} · {dp.get("Posición", "—")}</p>',
+            f'<p class="bm-meta"><strong>{html.escape(nombre_jugador)}</strong> · '
+            f'{html.escape(jugador.get("Equipo", "—"))}'
+            + (f" · Temporada {html.escape(temporada)}" if temporada else "")
+            + "</p>",
             unsafe_allow_html=True,
         )
 
@@ -219,12 +241,12 @@ if enviar:
         st.download_button(
             label="⬇  Descargar informe PDF",
             data=pdf,
-            file_name=f"{_safe_filename(dp.get('Nombre', nombre))}_Report.pdf",
+            file_name=f"{_safe_filename(nombre_jugador)}_Report.pdf",
             mime="application/pdf",
         )
 
-        with st.expander("Ver datos extraídos (JSON)"):
-            st.json(data)
+        with st.expander("Ver datos del informe (JSON)"):
+            st.json({k: v for k, v in vista.items() if k not in ("foto", "alias")})
 
     except ValueError as exc:
         st.error(str(exc))
@@ -237,8 +259,10 @@ if enviar:
         st.error("Error interno al generar el informe. Inténtalo de nuevo más tarde.")
 
 st.markdown(
-    '<div class="bm-nota">Las tablas del informe se construyen directamente a '
-    "partir de los datos (balldontlie · ESPN). El modelo de IA solo redacta el "
-    "texto analítico sobre esos mismos datos, sin intervenir en las cifras.</div>",
+    '<div class="bm-nota">Todos los valores proceden de balldontlie y de las '
+    "estadísticas oficiales de ESPN. Las métricas que calcula Basketmática "
+    "(per-36 y ratios de tiro) se etiquetan siempre como calculadas. "
+    "El modelo de IA solo redacta el texto analítico sobre esos mismos datos, "
+    "sin intervenir en las cifras.</div>",
     unsafe_allow_html=True,
 )

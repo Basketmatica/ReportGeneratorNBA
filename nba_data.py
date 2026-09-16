@@ -443,6 +443,18 @@ def _espn_buscar_atleta_id(nombre: str) -> Optional[str]:
     return None
 
 
+def _espn_fecha_nacimiento(espn_id: str) -> str:
+    """'29/02/2000 (26 años)', mismo formato que la ficha de acb.com. '–' si ESPN no la da."""
+    atleta = (_espn_get(f"{ESPN_WEB_BASE}/athletes/{espn_id}") or {}).get("athlete") or {}
+    dob, edad = atleta.get("displayDOB"), atleta.get("age")
+    try:
+        d, m, a = (int(x) for x in str(dob).split("/"))
+        fecha = f"{d:02d}/{m:02d}/{a}"
+    except (TypeError, ValueError):
+        return "–"
+    return f"{fecha} ({edad} años)" if edad else fecha
+
+
 def _espn_stats_jugador(espn_id: str) -> Optional[dict]:
     """
     Recupera stats históricas (varias temporadas) desde el endpoint /stats de
@@ -484,6 +496,10 @@ _ESPN_STAT_KEYS: Dict[str, str] = {
     "fieldGoalPct": "FG%",
     "threePointFieldGoalPct": "3P%",
     "freeThrowPct": "FT%",
+    # Compuestos "anotados-intentados": se separan en dos claves al parsear.
+    "avgFieldGoalsMade-avgFieldGoalsAttempted": "TC_conv-TC_int",
+    "avgThreePointFieldGoalsMade-avgThreePointFieldGoalsAttempted": "T3_conv-T3_int",
+    "avgFreeThrowsMade-avgFreeThrowsAttempted": "TL_conv-TL_int",
 }
 
 # Categoría "totals" (totales acumulados de carrera): incluye los compuestos
@@ -563,6 +579,11 @@ def _parsear_fila_posicional(
         if not target:
             continue
         v = "" if value is None else str(value).strip()
+        if "-" in target:
+            partes = v.split("-")
+            if len(partes) == 2 and all(partes):
+                out.update(zip(target.split("-"), (x.strip() for x in partes)))
+            continue
         if not v or v in {"-", "--"}:
             out[target] = "–"
             continue
@@ -603,14 +624,15 @@ def _per36(stats: Dict[str, str]) -> Dict[str, str]:
     return out
 
 
-def _temporada_en_curso() -> int:
+def _temporada_mas_reciente() -> int:
     # ESPN identifica la temporada 2026-27 como year=2027; empieza en octubre.
     hoy = date.today()
     return hoy.year + 1 if hoy.month >= 10 else hoy.year
 
 
 def _seasons_de_categoria(
-    cat: dict, key_map: Dict[str, str], pct_keys: set
+    cat: dict, key_map: Dict[str, str], pct_keys: set,
+    equipos: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Parsea ``cat["statistics"]`` a lista de seasons normalizadas, ordenadas
@@ -637,6 +659,9 @@ def _seasons_de_categoria(
         stats_arr = row.get("stats") or []
         fila = _parsear_fila_posicional(names, stats_arr, key_map, pct_keys)
         fila["Temporada"] = display
+        slug = str(row.get("teamSlug") or "")
+        fila["__total"] = "totals" in slug.lower()
+        fila["Club"] = str(((equipos or {}).get(slug) or {}).get("displayName") or "")
         try:
             fila["__year"] = int(year) if year is not None else 0
         except (TypeError, ValueError):
@@ -648,15 +673,32 @@ def _seasons_de_categoria(
         if "Partidos" in s:
             return (_safe_float(s.get("Partidos")) or 0) > 0
         for k, v in s.items():
-            if k in {"Temporada", "__year"}:
+            if k in {"Temporada", "__year", "__total", "Club"}:
                 continue
             if v not in (None, "", "–", "0"):
                 return True
         return False
 
-    seasons = [s for s in seasons if has_data(s)]
+    seasons = _agrupar_traspasos([s for s in seasons if has_data(s)])
     seasons.sort(key=lambda s: s.get("__year", 0), reverse=True)
     return seasons
+
+
+def _agrupar_traspasos(seasons: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Temporada con traspaso: ESPN da una fila por equipo y otra 'Totals'. Nos quedamos con el total."""
+    por_anio: Dict[int, List[Dict[str, Any]]] = {}
+    for s in seasons:
+        por_anio.setdefault(s.get("__year", 0), []).append(s)
+    out: List[Dict[str, Any]] = []
+    for filas in por_anio.values():
+        total = next((f for f in filas if f.get("__total")), None)
+        if total is not None:
+            total["Club"] = " / ".join(f["Club"] for f in filas if f is not total and f.get("Club"))
+            filas = [total]
+        for f in filas:
+            f.pop("__total", None)
+            out.append(f)
+    return out
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -694,7 +736,7 @@ def _extraer_stats_completas_espn(
         cat_avg = _categoria_por_nombre(raw, "averages")
         if cat_avg:
             names_avg = cat_avg.get("names") or []
-            seasons = _seasons_de_categoria(cat_avg, _ESPN_STAT_KEYS, _PCT_KEYS)
+            seasons = _seasons_de_categoria(cat_avg, _ESPN_STAT_KEYS, _PCT_KEYS, raw.get("teams"))
 
             # Asegurar todas las claves esperadas en cada season.
             for s in seasons:
@@ -740,7 +782,7 @@ def _extraer_stats_completas_espn(
         cat_misc = _categoria_por_nombre(raw, "miscellaneous")
         if cat_misc:
             names_misc = cat_misc.get("names") or []
-            misc_seasons = _seasons_de_categoria(cat_misc, _ESPN_MISC_KEYS, set())
+            misc_seasons = _seasons_de_categoria(cat_misc, _ESPN_MISC_KEYS, set(), raw.get("teams"))
             if misc_seasons:
                 # Sólo exponemos la más reciente — el resto sería ruido.
                 misc_ultima = dict(misc_seasons[0])
@@ -830,7 +872,7 @@ def obtener_datos_jugador(nombre_jugador: str) -> Dict[str, Any]:
         "Posición": str(bdl.get("position") or "–"),
         "Altura": _altura_fmt(bdl.get("height", "")),
         "Peso": _peso_fmt(bdl.get("weight", "")),
-        "Edad": "–",  # balldontlie no expone fecha de nacimiento para NBA
+        "Fecha nacimiento": "–",  # balldontlie no la expone; se completa con ESPN
         "País": str(bdl.get("country") or "–"),
         "Universidad": str(bdl.get("college") or "–"),
         "Draft": _draft_fmt(bdl),
@@ -850,6 +892,7 @@ def obtener_datos_jugador(nombre_jugador: str) -> Dict[str, Any]:
 
     if espn_id:
         logger.info("✓ ESPN athlete ID: %s", espn_id)
+        bio["Fecha nacimiento"] = _espn_fecha_nacimiento(espn_id)
         try:
             stats = _extraer_stats_completas_espn(espn_id)
         except Exception as exc:
@@ -868,11 +911,12 @@ def obtener_datos_jugador(nombre_jugador: str) -> Dict[str, Any]:
             estadisticas["ultima_temporada"] = ultima
 
             anio_ultima = seasons[0].get("__year", 0)
-            if anio_ultima and anio_ultima < _temporada_en_curso():
+            reciente = _temporada_mas_reciente()
+            if anio_ultima and anio_ultima < reciente:
                 estadisticas["_nota_temporada"] = (
-                    f"La temporada en curso aún no tiene partidos disputados: "
-                    f"'ultima_temporada' corresponde a {seasons[0].get('Temporada')}, "
-                    "la última temporada completa del jugador."
+                    f"Sin partidos disputados en la temporada {reciente - 1}-{reciente % 100:02d}: "
+                    f"los datos de 'temporada' corresponden a {seasons[0].get('Temporada')}, "
+                    "su última temporada con partidos."
                 )
 
             anteriores = []

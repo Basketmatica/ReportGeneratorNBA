@@ -1,46 +1,67 @@
-# 🏀 Generador de Reportes NBA · Basketmática
+# Generador de Reportes NBA · Basketmática
 
-Escribes el nombre de un jugador NBA y en unos segundos obtienes un **informe de scouting en PDF**: perfil físico, estadísticas de la temporada y de carrera, un análisis de desempeño, un FODA y una proyección de rol, con estética propia de [Basketmática](https://basketmatica.wordpress.com/).
+Aplicación que genera scouting reports en PDF de jugadores de la NBA, a partir
+de datos de balldontlie y de las estadísticas oficiales de ESPN, más un
+análisis redactado por un modelo de lenguaje.
 
-Detrás combina datos reales de baloncesto con un LLM, pero de una forma pensada para que el modelo **no pueda inventarse ni un solo número**.
+Es la herramienta que alimenta la sección de reportes de [Basketmática](https://basketmatica.com).
+Tiene un generador hermano para la Liga Endesa (`ReportGeneratorACB`) que
+comparte el mismo núcleo: mismo informe, mismas reglas y mismo tratamiento del
+texto de la IA.
 
 ## Cómo funciona
 
-1. **Datos** — el nombre se busca en [balldontlie](https://www.balldontlie.io/) (estadísticas) y se completa con la API pública de ESPN (foto, biografía). Todo cacheado y con throttling para respetar los límites del free tier.
-2. **Análisis** — esos datos, ya en JSON, se le pasan a un LLM que redacta el texto: resumen de desempeño, FODA, proyección y jugadores comparables.
-3. **PDF** — Python monta el HTML (tablas incluidas) directamente desde el JSON de datos, y [WeasyPrint](https://weasyprint.org/) lo convierte en PDF.
+1. **Resolución del jugador** — el nombre introducido se resuelve contra la
+   base de datos estática de `nba_api` (sin red) y se completa en balldontlie.
+2. **Extracción de datos** — bio (balldontlie + ESPN) y estadísticas de ESPN:
+   promedios por temporada con su club, promedios de carrera, intentos de tiro
+   por partido y dobles-dobles, triples-dobles y AST/TO oficiales. Las
+   temporadas con traspaso se agrupan en una fila con todos los clubes. Si la
+   temporada más reciente no tiene partidos del jugador, se usa la última con
+   partidos.
+3. **Vista del informe** — los datos se reducen exactamente a lo que muestran
+   las tablas del PDF, en formato español (coma decimal, metros y kilos). Esa
+   misma vista es la que recibe el LLM: no puede citar ninguna cifra que el
+   lector no encuentre en una tabla.
+4. **Análisis con IA** — el LLM redacta el análisis (resumen de desempeño,
+   FODA, proyección, jugadores de perfil similar) como JSON estructurado. El
+   modelo nunca genera las tablas de cifras. Después, Python normaliza el
+   texto (coma decimal, terminología de baloncesto en España) y descarta al
+   propio jugador si aparece entre los similares.
+5. **Render y PDF** — Python compone el HTML final con los tokens de diseño
+   de la marca y WeasyPrint lo convierte a PDF.
 
-### La decisión que importa: el LLM no toca las tablas
+Las métricas calculadas por Basketmática (per-36, estándar en la NBA, y ratios
+de tiro como TS%, eFG%, 3PAr y FTr) salen de minutos, promedios e intentos
+oficiales y siempre aparecen etiquetadas como calculadas, tanto en las tablas
+como en el texto de la IA.
 
-En la versión original (FastAPI + Render), el modelo generaba el HTML completo del informe, tablas de estadísticas incluidas. Eso tiene dos problemas: el modelo puede *alucinar* una cifra al copiarla, y generar un HTML de varios miles de tokens no cabe cómodamente en los límites de los planes gratuitos de LLM.
+## Stack técnico
 
-La solución fue partir el problema en dos responsabilidades separadas:
+| Capa | Tecnología |
+|---|---|
+| Interfaz | [Streamlit](https://streamlit.io) |
+| Datos | [balldontlie](https://www.balldontlie.io) + API pública de ESPN con `httpx`; `nba_api` para resolver nombres |
+| Análisis con IA | Cliente propio compatible con la API de OpenAI, con fallback en cadena entre proveedores (Groq, OpenRouter, Cerebras, Mistral, Gemini) |
+| Generación de PDF | [WeasyPrint](https://weasyprint.org) |
 
-- **Los números los pinta Python.** Las tablas (`render_html` en `report_nba.py`) se construyen directamente desde el JSON de estadísticas. El modelo nunca las ve ni las reescribe, así que no hay forma de que las altere.
-- **El modelo solo escribe prosa.** Devuelve un JSON compacto (~1K tokens) con el análisis cualitativo — lo único para lo que de verdad hace falta un LLM.
+## Estructura del repositorio
 
-El resultado son informes con datos garantizados correctos y una salida del modelo tan pequeña que corre sin problema en cualquier free tier.
+```
+streamlit_app.py   Interfaz de usuario
+nba_data.py        Datos de la fuente: resolución del jugador, bio y estadísticas ESPN
+report_nba.py      Lo propio de la competición: configuración, vista y ratios calculados
+informe_comun.py   Núcleo común: prompt, normalización del texto de la IA, render y PDF
+llm_client.py      Cliente LLM multi-proveedor con fallback
+```
 
-## Una capa de LLM que no depende de un solo proveedor
+`informe_comun.py` y `llm_client.py` son **idénticos** en los generadores ACB y
+NBA. Tras cambiar uno, cópialo al otro repositorio y comprueba:
 
-`llm_client.py` habla con cualquier proveedor con API compatible con OpenAI (chat/completions), configurable por *secrets*, con una cadena de fallback: si el proveedor favorito da rate limit o está caído, se prueba con el siguiente.
-
-| Proveedor | Modelo por defecto | Free tier |
-|---|---|---|
-| **Groq** (recomendado) | llama-3.3-70b-versatile | 30 req/min, ~1.000 req/día, sin tarjeta |
-| OpenRouter | llama-3.3-70b-instruct:free | 20 req/min, 50 req/día |
-| Cerebras | gpt-oss-120b | ~1M tokens/día |
-| Mistral | mistral-small-latest | — |
-| Gemini (endpoint compatible OpenAI) | gemini-2.5-flash | según cuenta |
-
-El orden de intento se configura con `LLM_PROVIDERS = "groq,openrouter,gemini"`; los proveedores sin clave configurada simplemente se saltan.
-
-## Stack
-
-- **[Streamlit](https://streamlit.io/)** — interfaz.
-- **[balldontlie](https://www.balldontlie.io/) + ESPN** — datos y fotos de jugadores.
-- **LLM (Groq / OpenRouter / Cerebras / Mistral / Gemini)** — análisis en texto.
-- **[WeasyPrint](https://weasyprint.org/)** — HTML → PDF.
+```bash
+diff informe_comun.py ../ReportGeneratorACB/informe_comun.py
+diff llm_client.py ../ReportGeneratorACB/llm_client.py
+```
 
 ## Probarlo en local
 
@@ -49,9 +70,20 @@ pip install -r requirements.txt
 streamlit run streamlit_app.py
 ```
 
-Necesita al menos una clave de LLM y, opcionalmente, una de balldontlie. Se configuran en `.streamlit/secrets.toml`:
+Necesita la clave de balldontlie y al menos una de LLM en `.streamlit/secrets.toml`:
 
 ```toml
-BALLDONTLIE_API_KEY = "..."   # opcional, sube el límite de peticiones
-GROQ_API_KEY = "..."          # gratis, sin tarjeta — console.groq.com
+BALLDONTLIE_API_KEY = "..."           # app.balldontlie.io
+GROQ_API_KEY = "..."                  # console.groq.com
+GROQ_MODEL = "openai/gpt-oss-120b"
+# Fallback recomendado (mismo modelo, límites más altos):
+# CEREBRAS_API_KEY = "..."
+# LLM_PROVIDERS = "groq,cerebras,gemini"
 ```
+
+## Por qué este enfoque
+
+Pedir al LLM que redacte solo texto (nunca cifras) mantiene la respuesta
+pequeña, viable en los free tier de cualquier proveedor, y garantiza que
+ningún número de las tablas del PDF pase por el modelo: todos vienen
+directamente de balldontlie y ESPN o de un cálculo etiquetado sobre esos datos.
