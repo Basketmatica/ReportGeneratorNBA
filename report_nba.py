@@ -87,7 +87,8 @@ REGLAS DE RIGOR (obligatorias, prevalecen sobre todo lo demás):
 3. No hay rankings de liga en estos datos: evita calificativos absolutos salvo que un número del JSON lo haga evidente; prefiere describir.
 4. Temporadas con PJ < 15 son muestra no significativa: exclúyelas de tendencias y no cites sus porcentajes.
 5. Prohibido mencionar defensa, lesiones, contratos, vestuario o minutos futuros si el JSON no contiene un dato que lo respalde. Cada punto del FODA debe citar al menos un número del JSON.
-6. En la tendencia de la trayectoria: di meseta, descenso o mejora según los números reales, no la narrativa amable. Un pico anterior seguido de valores menores es meseta o leve descenso, no "mejora"."""
+6. En la tendencia de la trayectoria: di meseta, descenso o mejora según los números reales, no la narrativa amable. Un pico anterior seguido de valores menores es meseta o leve descenso, no "mejora".
+7. Si existe "_nota_temporada", la temporada en curso aún no ha empezado y "ultima_temporada" es la última completa: no interpretes la temporada nueva como ausencia o falta de participación del jugador."""
 
 
 # ─── Render HTML determinista ─────────────────────────────────────────────────
@@ -453,7 +454,7 @@ def generar_pdf_jugador_nba(
         _prompt_analisis(player_data),
         proveedores,
         system=_SYSTEM,
-        max_tokens=2500,
+        max_tokens=3500,
     )
 
     html_doc = render_html(player_data, analisis)

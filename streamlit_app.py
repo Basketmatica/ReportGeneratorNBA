@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -161,10 +162,16 @@ def datos_jugador(nombre_normalizado: str):
     return obtener_datos_jugador(nombre_normalizado)
 
 
+@st.cache_data(ttl=60 * 60 * 6, max_entries=400, show_spinner=False)
+def informe_pdf(datos_json: str, _proveedores: list) -> bytes:
+    # Clave = datos del jugador: si cambian sus estadísticas, el informe se regenera.
+    return generar_pdf_jugador_nba("", _proveedores, player_data=json.loads(datos_json))
+
+
 def _safe_filename(name: str) -> str:
     s = unicodedata.normalize("NFKD", name)
     s = "".join(c for c in s if not unicodedata.combining(c))
-    s = re.sub(r"[^A-Za-z0-9 _.-]", "_", s).strip()
+    s = re.sub(r"[^A-Za-z0-9-]+", "_", s).strip("_")
     return s or "Player"
 
 
@@ -207,7 +214,7 @@ if enviar:
         )
 
         with st.spinner("Redactando el análisis y montando el PDF… (~10-25 s)"):
-            pdf = generar_pdf_jugador_nba(nombre, proveedores, player_data=data)
+            pdf = informe_pdf(json.dumps(data, ensure_ascii=False), proveedores)
 
         st.download_button(
             label="⬇  Descargar informe PDF",

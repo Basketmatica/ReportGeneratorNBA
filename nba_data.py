@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+from datetime import date
 from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
@@ -602,6 +603,12 @@ def _per36(stats: Dict[str, str]) -> Dict[str, str]:
     return out
 
 
+def _temporada_en_curso() -> int:
+    # ESPN identifica la temporada 2026-27 como year=2027; empieza en octubre.
+    hoy = date.today()
+    return hoy.year + 1 if hoy.month >= 10 else hoy.year
+
+
 def _seasons_de_categoria(
     cat: dict, key_map: Dict[str, str], pct_keys: set
 ) -> List[Dict[str, Any]]:
@@ -638,6 +645,8 @@ def _seasons_de_categoria(
 
     # Filtrar entradas sin datos relevantes (todo "–" / vacío / 0).
     def has_data(s: Dict[str, Any]) -> bool:
+        if "Partidos" in s:
+            return (_safe_float(s.get("Partidos")) or 0) > 0
         for k, v in s.items():
             if k in {"Temporada", "__year"}:
                 continue
@@ -857,6 +866,14 @@ def obtener_datos_jugador(nombre_jugador: str) -> Dict[str, Any]:
             ultima = dict(seasons[0])
             ultima.pop("__year", None)
             estadisticas["ultima_temporada"] = ultima
+
+            anio_ultima = seasons[0].get("__year", 0)
+            if anio_ultima and anio_ultima < _temporada_en_curso():
+                estadisticas["_nota_temporada"] = (
+                    f"La temporada en curso aún no tiene partidos disputados: "
+                    f"'ultima_temporada' corresponde a {seasons[0].get('Temporada')}, "
+                    "la última temporada completa del jugador."
+                )
 
             anteriores = []
             for s in seasons[1:]:
